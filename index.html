@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Slot Matcher</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --cream:#F7F4EE;--ink:#1A1A18;--ink-mid:#4A4A45;--ink-light:#8A8A82;
+  --sage:#5C7A6A;--sage-light:#EBF0EC;--sage-mid:#C4D5C9;
+  --warm:#C4855A;--warm-light:#F5EDE6;--border:rgba(26,26,24,0.12);--radius:10px;
+}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--ink);min-height:100vh;font-size:15px;line-height:1.6}
+header{border-bottom:1px solid var(--border);padding:1.5rem 2.5rem;display:flex;align-items:baseline;gap:1rem}
+header h1{font-family:'DM Serif Display',serif;font-size:1.4rem;font-weight:400}
+header span{font-size:13px;color:var(--ink-light)}
+main{max-width:860px;margin:0 auto;padding:2.5rem 2rem 4rem}
+.step{margin-bottom:2rem}
+.step-label{font-size:11px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);margin-bottom:.4rem}
+.step h2{font-family:'DM Serif Display',serif;font-size:1.2rem;font-weight:400;margin-bottom:.9rem}
+.upload-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.upload-wrap{position:relative;cursor:pointer}
+.upload-zone{border:1.5px dashed var(--sage-mid);border-radius:var(--radius);padding:1.75rem 1.5rem;text-align:center;background:white;transition:background .15s,border-color .15s;pointer-events:none}
+.upload-wrap:hover .upload-zone{background:var(--sage-light);border-color:var(--sage)}
+.upload-zone.loaded{background:var(--sage-light);border-color:var(--sage);border-style:solid}
+.upload-zone .icon{font-size:1.6rem;margin-bottom:.4rem}
+.upload-zone p{color:var(--ink-mid);font-size:13px;margin-top:.3rem}
+.upload-zone .loaded-text{font-weight:500;color:var(--sage);font-size:14px}
+.file-input{position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer;font-size:0}
+.slot-form{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:1rem}
+.field label{display:block;font-size:12px;font-weight:500;color:var(--ink-mid);margin-bottom:5px;letter-spacing:.03em}
+.field select,.field input{width:100%;padding:.6rem .9rem;border:1px solid var(--border);border-radius:7px;background:white;font-family:'DM Sans',sans-serif;font-size:14px;color:var(--ink);appearance:none;outline:none;transition:border-color .15s}
+.field select:focus,.field input:focus{border-color:var(--sage);box-shadow:0 0 0 3px rgba(92,122,106,.12)}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:.7rem 1.6rem;border-radius:7px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:500;cursor:pointer;transition:all .15s;border:none}
+.btn-primary{background:var(--sage);color:white;margin-top:1.1rem}
+.btn-primary:hover{background:#4a6659}
+.btn-primary:disabled{background:var(--sage-mid);cursor:not-allowed}
+.divider{border:none;border-top:1px solid var(--border);margin:2rem 0}
+.results-header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1rem}
+.results-header h2{font-family:'DM Serif Display',serif;font-size:1.2rem;font-weight:400}
+.badge{font-size:12px;font-weight:500;background:var(--sage-light);color:var(--sage);border-radius:20px;padding:3px 12px}
+.patient-card{background:white;border:1px solid var(--border);border-radius:var(--radius);margin-bottom:.9rem;overflow:hidden;transition:box-shadow .15s}
+.patient-card:hover{box-shadow:0 2px 12px rgba(0,0,0,.07)}
+.card-header{display:flex;align-items:center;justify-content:space-between;padding:1rem 1.25rem;cursor:pointer;gap:1rem}
+.patient-info{display:flex;align-items:center;gap:12px}
+.avatar{width:38px;height:38px;border-radius:50%;background:var(--sage-light);color:var(--sage);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;flex-shrink:0}
+.patient-name{font-weight:500;font-size:15px}
+.patient-meta{font-size:13px;color:var(--ink-light)}
+.card-stats{display:flex;gap:1.5rem;align-items:center;flex-shrink:0}
+.stat{text-align:right}
+.stat-value{font-size:15px;font-weight:500}
+.stat-label{font-size:11px;color:var(--ink-light)}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.dot-hot{background:var(--sage)}.dot-warm{background:var(--warm)}.dot-cold{background:var(--ink-light)}
+.chevron{color:var(--ink-light);font-size:18px;transition:transform .2s;flex-shrink:0}
+.card-body{display:none;border-top:1px solid var(--border);padding:1.25rem}
+.card-body.open{display:block}
+.complaint-pill{display:inline-block;font-size:12px;background:var(--warm-light);color:#7a4a2a;border-radius:20px;padding:3px 10px;margin-bottom:.9rem;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tab-row{display:flex;margin-bottom:.9rem;border:1px solid var(--border);border-radius:7px;overflow:hidden;width:fit-content}
+.tab-btn{font-family:'DM Sans',sans-serif;font-size:12px;font-weight:500;padding:5px 14px;background:white;border:none;cursor:pointer;color:var(--ink-mid);transition:all .15s}
+.tab-btn.active{background:var(--sage);color:white}
+.tab-btn:first-child{border-right:1px solid var(--border)}
+.section-label{font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-light);margin-bottom:.6rem;display:flex;align-items:center;gap:8px}
+.ai-badge{font-size:10px;background:var(--sage-light);color:var(--sage);border-radius:10px;padding:2px 7px;font-weight:500}
+.email-box{background:var(--cream);border:1px solid var(--border);border-radius:7px;padding:1rem 1.25rem;font-size:14px;line-height:1.8;color:var(--ink);white-space:pre-wrap;font-family:'DM Sans',sans-serif;min-height:140px;outline:none;cursor:text}
+.email-box:focus{border-color:var(--sage);box-shadow:0 0 0 3px rgba(92,122,106,.12);background:white}
+.sms-box{background:var(--cream);border:1px solid var(--border);border-radius:7px;padding:.9rem 1.1rem;font-size:14px;line-height:1.7;color:var(--ink);white-space:pre-wrap;font-family:'DM Sans',sans-serif;min-height:80px;outline:none;cursor:text}
+.sms-box:focus{border-color:var(--sage);box-shadow:0 0 0 3px rgba(92,122,106,.12);background:white}
+.char-count{font-size:11px;color:var(--ink-light);margin-top:4px;text-align:right}
+.char-count.over{color:#c0392b;font-weight:500}
+.generating{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--ink-light);padding:.5rem 0 .75rem}
+.spinner{width:14px;height:14px;border:2px solid var(--sage-mid);border-top-color:var(--sage);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
+@keyframes spin{to{transform:rotate(360deg)}}
+.card-actions{display:flex;gap:.75rem;margin-top:.75rem;flex-wrap:wrap}
+.btn-sm{background:white;border:1px solid var(--border);color:var(--ink-mid);font-size:13px;padding:.45rem 1rem;border-radius:6px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .15s}
+.btn-sm:hover{border-color:var(--sage);color:var(--sage)}
+.btn-sm.copied{border-color:var(--sage);color:var(--sage);background:var(--sage-light)}
+.btn-sm:disabled{opacity:.45;cursor:not-allowed}
+.progress-wrap{margin-top:1rem;display:none}
+.progress-bar{height:3px;background:var(--sage-mid);border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;background:var(--sage);width:0%;transition:width .3s}
+.progress-label{font-size:13px;color:var(--ink-light);margin-top:.4rem}
+.notice{background:var(--warm-light);border:1px solid rgba(196,133,90,.2);border-radius:8px;padding:.65rem 1rem;font-size:13px;color:var(--ink-mid);margin-top:.9rem}
+.legend{display:flex;gap:1.25rem;margin-bottom:1.25rem;font-size:12px;color:var(--ink-mid);flex-wrap:wrap}
+.legend-item{display:flex;align-items:center;gap:6px}
+.empty-state{text-align:center;padding:3rem 1rem;color:var(--ink-light)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Slot Matcher</h1>
+  <span>Find patients for open appointment slots</span>
+</header>
+<main>
+  <div class="step">
+    <div class="step-label">Step 1</div>
+    <h2>Upload your Cliniko exports</h2>
+    <div class="upload-grid">
+      <div class="upload-wrap" onclick="document.getElementById('attendeesInput').click()">
+        <div class="upload-zone" id="attendeesZone">
+          <div class="icon">&#x1F4CB;</div>
+          <div id="attendeesText"><strong>Attendees CSV</strong></div>
+          <p id="attendeesSub">Attendees export from Cliniko</p>
+        </div>
+        <input class="file-input" type="file" id="attendeesInput" accept=".csv">
+      </div>
+      <div class="upload-wrap" onclick="document.getElementById('notesInput').click()">
+        <div class="upload-zone" id="notesZone">
+          <div class="icon">&#x1F5D2;&#xFE0F;</div>
+          <div id="notesText"><strong>Treatment Notes CSV</strong></div>
+          <p id="notesSub">Treatment notes export from Cliniko</p>
+        </div>
+        <input class="file-input" type="file" id="notesInput" accept=".csv">
+      </div>
+    </div>
+    <div class="notice">&#x1F512; All data is processed locally in your browser &#x2014; nothing is sent anywhere.</div>
+    <div style="margin-top:1rem;display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">
+      <div class="field" style="margin:0;flex:1;min-width:260px;">
+        <label>Anthropic API key <span style="font-weight:400;color:var(--ink-light)">(for AI email generation)</span></label>
+        <input type="password" id="apiKey" placeholder="sk-ant-..." style="font-family:monospace;font-size:13px;">
+      </div>
+      <div style="font-size:12px;color:var(--ink-light);padding-top:18px;">Get yours at <a href="https://console.anthropic.com" target="_blank" style="color:var(--sage)">console.anthropic.com</a></div>
+    </div>
+  </div>
+  <hr class="divider">
+  <div class="step">
+    <div class="step-label">Step 2</div>
+    <h2>Enter the open slot</h2>
+    <div class="slot-form">
+      <div class="field">
+        <label>Day of week</label>
+        <select id="slotDay" onchange="checkReady()">
+          <option value="">Select day...</option>
+          <option>Monday</option><option>Tuesday</option><option>Wednesday</option>
+          <option>Thursday</option><option>Friday</option><option>Saturday</option><option>Sunday</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Time block</label>
+        <select id="slotBlock" onchange="checkReady()">
+          <option value="">Select block...</option>
+          <option value="morning">Morning (6am - 12pm)</option>
+          <option value="midday">Midday (12pm - 3pm)</option>
+          <option value="afternoon">Afternoon (3pm - 6pm)</option>
+          <option value="evening">Evening (6pm - 9pm)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Clinic</label>
+        <select id="slotBiz" onchange="checkReady()">
+          <option value="">Select clinic...</option>
+          <option value="Greenvale Osteopathy">Greenvale</option>
+          <option value="Tullamarine Osteopathy">Tullamarine</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Practitioner</label>
+        <select id="slotPrac">
+          <option value="">All practitioners</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="findBtn" onclick="findPatients()" disabled>Find patients &#x2192;</button>
+    <div class="progress-wrap" id="progressWrap">
+      <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-label" id="progressLabel"></div>
+    </div>
+  </div>
+  <hr class="divider" id="resultsDivider" style="display:none">
+  <div id="resultsSection" style="display:none">
+    <div class="results-header">
+      <h2>Matched patients</h2>
+      <span class="badge" id="resultsCount"></span>
+    </div>
+    <div class="legend">
+      <span class="legend-item"><span class="dot dot-hot"></span> Seen in last 3 months</span>
+      <span class="legend-item"><span class="dot dot-warm"></span> 3-12 months ago</span>
+      <span class="legend-item"><span class="dot dot-cold"></span> Over a year ago</span>
+    </div>
+    <div id="resultsList"></div>
+  </div>
+</main>
+<script>/* @license
+Papa Parse
+v5.5.3
+https://github.com/mholt/PapaParse
+License: MIT
+*/
+((e,t)=>{"function"==typeof define&&define.amd?define([],t):"object"==typeof module&&"undefined"!=typeof exports?module.exports=t():e.Papa=t()})(this,function r(){var n="undefined"!=typeof self?self:"undefined"!=typeof window?window:void 0!==n?n:{};var d,s=!n.document&&!!n.postMessage,a=n.IS_PAPA_WORKER||!1,o={},h=0,v={};function u(e){this._handle=null,this._finished=!1,this._completed=!1,this._halted=!1,this._input=null,this._baseIndex=0,this._partialLine="",this._rowCount=0,this._start=0,this._nextChunk=null,this.isFirstChunk=!0,this._completeResults={data:[],errors:[],meta:{}},function(e){var t=b(e);t.chunkSize=parseInt(t.chunkSize),e.step||e.chunk||(t.chunkSize=null);this._handle=new i(t),(this._handle.streamer=this)._config=t}.call(this,e),this.parseChunk=function(t,e){var i=parseInt(this._config.skipFirstNLines)||0;if(this.isFirstChunk&&0<i){let e=this._config.newline;e||(r=this._config.quoteChar||'"',e=this._handle.guessLineEndings(t,r)),t=[...t.split(e).slice(i)].join(e)}this.isFirstChunk&&U(this._config.beforeFirstChunk)&&void 0!==(r=this._config.beforeFirstChunk(t))&&(t=r),this.isFirstChunk=!1,this._halted=!1;var i=this._partialLine+t,r=(this._partialLine="",this._handle.parse(i,this._baseIndex,!this._finished));if(!this._handle.paused()&&!this._handle.aborted()){t=r.meta.cursor,i=(this._finished||(this._partialLine=i.substring(t-this._baseIndex),this._baseIndex=t),r&&r.data&&(this._rowCount+=r.data.length),this._finished||this._config.preview&&this._rowCount>=this._config.preview);if(a)n.postMessage({results:r,workerId:v.WORKER_ID,finished:i});else if(U(this._config.chunk)&&!e){if(this._config.chunk(r,this._handle),this._handle.paused()||this._handle.aborted())return void(this._halted=!0);this._completeResults=r=void 0}return this._config.step||this._config.chunk||(this._completeResults.data=this._completeResults.data.concat(r.data),this._completeResults.errors=this._completeResults.errors.concat(r.errors),this._completeResults.meta=r.meta),this._completed||!i||!U(this._config.complete)||r&&r.meta.aborted||(this._config.complete(this._completeResults,this._input),this._completed=!0),i||r&&r.meta.paused||this._nextChunk(),r}this._halted=!0},this._sendError=function(e){U(this._config.error)?this._config.error(e):a&&this._config.error&&n.postMessage({workerId:v.WORKER_ID,error:e,finished:!1})}}function f(e){var r;(e=e||{}).chunkSize||(e.chunkSize=v.RemoteChunkSize),u.call(this,e),this._nextChunk=s?function(){this._readChunk(),this._chunkLoaded()}:function(){this._readChunk()},this.stream=function(e){this._input=e,this._nextChunk()},this._readChunk=function(){if(this._finished)this._chunkLoaded();else{if(r=new XMLHttpRequest,this._config.withCredentials&&(r.withCredentials=this._config.withCredentials),s||(r.onload=y(this._chunkLoaded,this),r.onerror=y(this._chunkError,this)),r.open(this._config.downloadRequestBody?"POST":"GET",this._input,!s),this._config.downloadRequestHeaders){var e,t=this._config.downloadRequestHeaders;for(e in t)r.setRequestHeader(e,t[e])}var i;this._config.chunkSize&&(i=this._start+this._config.chunkSize-1,r.setRequestHeader("Range","bytes="+this._start+"-"+i));try{r.send(this._config.downloadRequestBody)}catch(e){this._chunkError(e.message)}s&&0===r.status&&this._chunkError()}},this._chunkLoaded=function(){4===r.readyState&&(r.status<200||400<=r.status?this._chunkError():(this._start+=this._config.chunkSize||r.responseText.length,this._finished=!this._config.chunkSize||this._start>=(e=>null!==(e=e.getResponseHeader("Content-Range"))?parseInt(e.substring(e.lastIndexOf("/")+1)):-1)(r),this.parseChunk(r.responseText)))},this._chunkError=function(e){e=r.statusText||e;this._sendError(new Error(e))}}function l(e){(e=e||{}).chunkSize||(e.chunkSize=v.LocalChunkSize),u.call(this,e);var i,r,n="undefined"!=typeof FileReader;this.stream=function(e){this._input=e,r=e.slice||e.webkitSlice||e.mozSlice,n?((i=new FileReader).onload=y(this._chunkLoaded,this),i.onerror=y(this._chunkError,this)):i=new FileReaderSync,this._nextChunk()},this._nextChunk=function(){this._finished||this._config.preview&&!(this._rowCount<this._config.preview)||this._readChunk()},this._readChunk=function(){var e=this._input,t=(this._config.chunkSize&&(t=Math.min(this._start+this._config.chunkSize,this._input.size),e=r.call(e,this._start,t)),i.readAsText(e,this._config.encoding));n||this._chunkLoaded({target:{result:t}})},this._chunkLoaded=function(e){this._start+=this._config.chunkSize,this._finished=!this._config.chunkSize||this._start>=this._input.size,this.parseChunk(e.target.result)},this._chunkError=function(){this._sendError(i.error)}}function c(e){var i;u.call(this,e=e||{}),this.stream=function(e){return i=e,this._nextChunk()},this._nextChunk=function(){var e,t;if(!this._finished)return e=this._config.chunkSize,i=e?(t=i.substring(0,e),i.substring(e)):(t=i,""),this._finished=!i,this.parseChunk(t)}}function p(e){u.call(this,e=e||{});var t=[],i=!0,r=!1;this.pause=function(){u.prototype.pause.apply(this,arguments),this._input.pause()},this.resume=function(){u.prototype.resume.apply(this,arguments),this._input.resume()},this.stream=function(e){this._input=e,this._input.on("data",this._streamData),this._input.on("end",this._streamEnd),this._input.on("error",this._streamError)},this._checkIsFinished=function(){r&&1===t.length&&(this._finished=!0)},this._nextChunk=function(){this._checkIsFinished(),t.length?this.parseChunk(t.shift()):i=!0},this._streamData=y(function(e){try{t.push("string"==typeof e?e:e.toString(this._config.encoding)),i&&(i=!1,this._checkIsFinished(),this.parseChunk(t.shift()))}catch(e){this._streamError(e)}},this),this._streamError=y(function(e){this._streamCleanUp(),this._sendError(e)},this),this._streamEnd=y(function(){this._streamCleanUp(),r=!0,this._streamData("")},this),this._streamCleanUp=y(function(){this._input.removeListener("data",this._streamData),this._input.removeListener("end",this._streamEnd),this._input.removeListener("error",this._streamError)},this)}function i(m){var n,s,a,t,o=Math.pow(2,53),h=-o,u=/^\s*-?(\d+\.?|\.\d+|\d+\.\d+)([eE][-+]?\d+)?\s*$/,d=/^((\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d\.\d+([+-][0-2]\d:[0-5]\d|Z))|(\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d:[0-5]\d([+-][0-2]\d:[0-5]\d|Z))|(\d{4}-[01]\d-[0-3]\dT[0-2]\d:[0-5]\d([+-][0-2]\d:[0-5]\d|Z)))$/,i=this,r=0,f=0,l=!1,e=!1,c=[],p={data:[],errors:[],meta:{}};function y(e){return"greedy"===m.skipEmptyLines?""===e.join("").trim():1===e.length&&0===e[0].length}function g(){if(p&&a&&(k("Delimiter","UndetectableDelimiter","Unable to auto-detect delimiting character; defaulted to '"+v.DefaultDelimiter+"'"),a=!1),m.skipEmptyLines&&(p.data=p.data.filter(function(e){return!y(e)})),_()){if(p)if(Array.isArray(p.data[0])){for(var e=0;_()&&e<p.data.length;e++)p.data[e].forEach(t);p.data.splice(0,1)}else p.data.forEach(t);function t(e,t){U(m.transformHeader)&&(e=m.transformHeader(e,t)),c.push(e)}}function i(e,t){for(var i=m.header?{}:[],r=0;r<e.length;r++){var n=r,s=e[r],s=((e,t)=>(e=>(m.dynamicTypingFunction&&void 0===m.dynamicTyping[e]&&(m.dynamicTyping[e]=m.dynamicTypingFunction(e)),!0===(m.dynamicTyping[e]||m.dynamicTyping)))(e)?"true"===t||"TRUE"===t||"false"!==t&&"FALSE"!==t&&((e=>{if(u.test(e)){e=parseFloat(e);if(h<e&&e<o)return 1}})(t)?parseFloat(t):d.test(t)?new Date(t):""===t?null:t):t)(n=m.header?r>=c.length?"__parsed_extra":c[r]:n,s=m.transform?m.transform(s,n):s);"__parsed_extra"===n?(i[n]=i[n]||[],i[n].push(s)):i[n]=s}return m.header&&(r>c.length?k("FieldMismatch","TooManyFields","Too many fields: expected "+c.length+" fields but parsed "+r,f+t):r<c.length&&k("FieldMismatch","TooFewFields","Too few fields: expected "+c.length+" fields but parsed "+r,f+t)),i}var r;p&&(m.header||m.dynamicTyping||m.transform)&&(r=1,!p.data.length||Array.isArray(p.data[0])?(p.data=p.data.map(i),r=p.data.length):p.data=i(p.data,0),m.header&&p.meta&&(p.meta.fields=c),f+=r)}function _(){return m.header&&0===c.length}function k(e,t,i,r){e={type:e,code:t,message:i};void 0!==r&&(e.row=r),p.errors.push(e)}U(m.step)&&(t=m.step,m.step=function(e){p=e,_()?g():(g(),0!==p.data.length&&(r+=e.data.length,m.preview&&r>m.preview?s.abort():(p.data=p.data[0],t(p,i))))}),this.parse=function(e,t,i){var r=m.quoteChar||'"',r=(m.newline||(m.newline=this.guessLineEndings(e,r)),a=!1,m.delimiter?U(m.delimiter)&&(m.delimiter=m.delimiter(e),p.meta.delimiter=m.delimiter):((r=((e,t,i,r,n)=>{var s,a,o,h;n=n||[",","\t","|",";",v.RECORD_SEP,v.UNIT_SEP];for(var u=0;u<n.length;u++){for(var d,f=n[u],l=0,c=0,p=0,g=(o=void 0,new E({comments:r,delimiter:f,newline:t,preview:10}).parse(e)),_=0;_<g.data.length;_++)i&&y(g.data[_])?p++:(d=g.data[_].length,c+=d,void 0===o?o=d:0<d&&(l+=Math.abs(d-o),o=d));0<g.data.length&&(c/=g.data.length-p),(void 0===a||l<=a)&&(void 0===h||h<c)&&1.99<c&&(a=l,s=f,h=c)}return{successful:!!(m.delimiter=s),bestDelimiter:s}})(e,m.newline,m.skipEmptyLines,m.comments,m.delimitersToGuess)).successful?m.delimiter=r.bestDelimiter:(a=!0,m.delimiter=v.DefaultDelimiter),p.meta.delimiter=m.delimiter),b(m));return m.preview&&m.header&&r.preview++,n=e,s=new E(r),p=s.parse(n,t,i),g(),l?{meta:{paused:!0}}:p||{meta:{paused:!1}}},this.paused=function(){return l},this.pause=function(){l=!0,s.abort(),n=U(m.chunk)?"":n.substring(s.getCharIndex())},this.resume=function(){i.streamer._halted?(l=!1,i.streamer.parseChunk(n,!0)):setTimeout(i.resume,3)},this.aborted=function(){return e},this.abort=function(){e=!0,s.abort(),p.meta.aborted=!0,U(m.complete)&&m.complete(p),n=""},this.guessLineEndings=function(e,t){e=e.substring(0,1048576);var t=new RegExp(P(t)+"([^]*?)"+P(t),"gm"),i=(e=e.replace(t,"")).split("\r"),t=e.split("\n"),e=1<t.length&&t[0].length<i[0].length;if(1===i.length||e)return"\n";for(var r=0,n=0;n<i.length;n++)"\n"===i[n][0]&&r++;return r>=i.length/2?"\r\n":"\r"}}function P(e){return e.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}function E(C){var S=(C=C||{}).delimiter,O=C.newline,x=C.comments,I=C.step,A=C.preview,T=C.fastMode,D=null,L=!1,F=null==C.quoteChar?'"':C.quoteChar,j=F;if(void 0!==C.escapeChar&&(j=C.escapeChar),("string"!=typeof S||-1<v.BAD_DELIMITERS.indexOf(S))&&(S=","),x===S)throw new Error("Comment character same as delimiter");!0===x?x="#":("string"!=typeof x||-1<v.BAD_DELIMITERS.indexOf(x))&&(x=!1),"\n"!==O&&"\r"!==O&&"\r\n"!==O&&(O="\n");var z=0,M=!1;this.parse=function(i,t,r){if("string"!=typeof i)throw new Error("Input must be a string");var n=i.length,e=S.length,s=O.length,a=x.length,o=U(I),h=[],u=[],d=[],f=z=0;if(!i)return w();if(T||!1!==T&&-1===i.indexOf(F)){for(var l=i.split(O),c=0;c<l.length;c++){if(d=l[c],z+=d.length,c!==l.length-1)z+=O.length;else if(r)return w();if(!x||d.substring(0,a)!==x){if(o){if(h=[],k(d.split(S)),R(),M)return w()}else k(d.split(S));if(A&&A<=c)return h=h.slice(0,A),w(!0)}}return w()}for(var p=i.indexOf(S,z),g=i.indexOf(O,z),_=new RegExp(P(j)+P(F),"g"),m=i.indexOf(F,z);;)if(i[z]===F)for(m=z,z++;;){if(-1===(m=i.indexOf(F,m+1)))return r||u.push({type:"Quotes",code:"MissingQuotes",message:"Quoted field unterminated",row:h.length,index:z}),E();if(m===n-1)return E(i.substring(z,m).replace(_,F));if(F===j&&i[m+1]===j)m++;else if(F===j||0===m||i[m-1]!==j){-1!==p&&p<m+1&&(p=i.indexOf(S,m+1));var y=v(-1===(g=-1!==g&&g<m+1?i.indexOf(O,m+1):g)?p:Math.min(p,g));if(i.substr(m+1+y,e)===S){d.push(i.substring(z,m).replace(_,F)),i[z=m+1+y+e]!==F&&(m=i.indexOf(F,z)),p=i.indexOf(S,z),g=i.indexOf(O,z);break}y=v(g);if(i.substring(m+1+y,m+1+y+s)===O){if(d.push(i.substring(z,m).replace(_,F)),b(m+1+y+s),p=i.indexOf(S,z),m=i.indexOf(F,z),o&&(R(),M))return w();if(A&&h.length>=A)return w(!0);break}u.push({type:"Quotes",code:"InvalidQuotes",message:"Trailing quote on quoted field is malformed",row:h.length,index:z}),m++}}else if(x&&0===d.length&&i.substring(z,z+a)===x){if(-1===g)return w();z=g+s,g=i.indexOf(O,z),p=i.indexOf(S,z)}else if(-1!==p&&(p<g||-1===g))d.push(i.substring(z,p)),z=p+e,p=i.indexOf(S,z);else{if(-1===g)break;if(d.push(i.substring(z,g)),b(g+s),o&&(R(),M))return w();if(A&&h.length>=A)return w(!0)}return E();function k(e){h.push(e),f=z}function v(e){var t=0;return t=-1!==e&&(e=i.substring(m+1,e))&&""===e.trim()?e.length:t}function E(e){return r||(void 0===e&&(e=i.substring(z)),d.push(e),z=n,k(d),o&&R()),w()}function b(e){z=e,k(d),d=[],g=i.indexOf(O,z)}function w(e){if(C.header&&!t&&h.length&&!L){var s=h[0],a=Object.create(null),o=new Set(s);let n=!1;for(let r=0;r<s.length;r++){let i=s[r];if(a[i=U(C.transformHeader)?C.transformHeader(i,r):i]){let e,t=a[i];for(;e=i+"_"+t,t++,o.has(e););o.add(e),s[r]=e,a[i]++,n=!0,(D=null===D?{}:D)[e]=i}else a[i]=1,s[r]=i;o.add(i)}n&&console.warn("Duplicate headers found and renamed."),L=!0}return{data:h,errors:u,meta:{delimiter:S,linebreak:O,aborted:M,truncated:!!e,cursor:f+(t||0),renamedHeaders:D}}}function R(){I(w()),h=[],u=[]}},this.abort=function(){M=!0},this.getCharIndex=function(){return z}}function g(e){var t=e.data,i=o[t.workerId],r=!1;if(t.error)i.userError(t.error,t.file);else if(t.results&&t.results.data){var n={abort:function(){r=!0,_(t.workerId,{data:[],errors:[],meta:{aborted:!0}})},pause:m,resume:m};if(U(i.userStep)){for(var s=0;s<t.results.data.length&&(i.userStep({data:t.results.data[s],errors:t.results.errors,meta:t.results.meta},n),!r);s++);delete t.results}else U(i.userChunk)&&(i.userChunk(t.results,n,t.file),delete t.results)}t.finished&&!r&&_(t.workerId,t.results)}function _(e,t){var i=o[e];U(i.userComplete)&&i.userComplete(t),i.terminate(),delete o[e]}function m(){throw new Error("Not implemented.")}function b(e){if("object"!=typeof e||null===e)return e;var t,i=Array.isArray(e)?[]:{};for(t in e)i[t]=b(e[t]);return i}function y(e,t){return function(){e.apply(t,arguments)}}function U(e){return"function"==typeof e}return v.parse=function(e,t){var i=(t=t||{}).dynamicTyping||!1;U(i)&&(t.dynamicTypingFunction=i,i={});if(t.dynamicTyping=i,t.transform=!!U(t.transform)&&t.transform,!t.worker||!v.WORKERS_SUPPORTED)return i=null,v.NODE_STREAM_INPUT,"string"==typeof e?(e=(e=>65279!==e.charCodeAt(0)?e:e.slice(1))(e),i=new(t.download?f:c)(t)):!0===e.readable&&U(e.read)&&U(e.on)?i=new p(t):(n.File&&e instanceof File||e instanceof Object)&&(i=new l(t)),i.stream(e);(i=(()=>{var e;return!!v.WORKERS_SUPPORTED&&(e=(()=>{var e=n.URL||n.webkitURL||null,t=r.toString();return v.BLOB_URL||(v.BLOB_URL=e.createObjectURL(new Blob(["var global = (function() { if (typeof self !== 'undefined') { return self; } if (typeof window !== 'undefined') { return window; } if (typeof global !== 'undefined') { return global; } return {}; })(); global.IS_PAPA_WORKER=true; ","(",t,")();"],{type:"text/javascript"})))})(),(e=new n.Worker(e)).onmessage=g,e.id=h++,o[e.id]=e)})()).userStep=t.step,i.userChunk=t.chunk,i.userComplete=t.complete,i.userError=t.error,t.step=U(t.step),t.chunk=U(t.chunk),t.complete=U(t.complete),t.error=U(t.error),delete t.worker,i.postMessage({input:e,config:t,workerId:i.id})},v.unparse=function(e,t){var n=!1,_=!0,m=",",y="\r\n",s='"',a=s+s,i=!1,r=null,o=!1,h=((()=>{if("object"==typeof t){if("string"!=typeof t.delimiter||v.BAD_DELIMITERS.filter(function(e){return-1!==t.delimiter.indexOf(e)}).length||(m=t.delimiter),"boolean"!=typeof t.quotes&&"function"!=typeof t.quotes&&!Array.isArray(t.quotes)||(n=t.quotes),"boolean"!=typeof t.skipEmptyLines&&"string"!=typeof t.skipEmptyLines||(i=t.skipEmptyLines),"string"==typeof t.newline&&(y=t.newline),"string"==typeof t.quoteChar&&(s=t.quoteChar),"boolean"==typeof t.header&&(_=t.header),Array.isArray(t.columns)){if(0===t.columns.length)throw new Error("Option columns is empty");r=t.columns}void 0!==t.escapeChar&&(a=t.escapeChar+s),t.escapeFormulae instanceof RegExp?o=t.escapeFormulae:"boolean"==typeof t.escapeFormulae&&t.escapeFormulae&&(o=/^[=+\-@\t\r].*$/)}})(),new RegExp(P(s),"g"));"string"==typeof e&&(e=JSON.parse(e));if(Array.isArray(e)){if(!e.length||Array.isArray(e[0]))return u(null,e,i);if("object"==typeof e[0])return u(r||Object.keys(e[0]),e,i)}else if("object"==typeof e)return"string"==typeof e.data&&(e.data=JSON.parse(e.data)),Array.isArray(e.data)&&(e.fields||(e.fields=e.meta&&e.meta.fields||r),e.fields||(e.fields=Array.isArray(e.data[0])?e.fields:"object"==typeof e.data[0]?Object.keys(e.data[0]):[]),Array.isArray(e.data[0])||"object"==typeof e.data[0]||(e.data=[e.data])),u(e.fields||[],e.data||[],i);throw new Error("Unable to serialize unrecognized input");function u(e,t,i){var r="",n=("string"==typeof e&&(e=JSON.parse(e)),"string"==typeof t&&(t=JSON.parse(t)),Array.isArray(e)&&0<e.length),s=!Array.isArray(t[0]);if(n&&_){for(var a=0;a<e.length;a++)0<a&&(r+=m),r+=k(e[a],a);0<t.length&&(r+=y)}for(var o=0;o<t.length;o++){var h=(n?e:t[o]).length,u=!1,d=n?0===Object.keys(t[o]).length:0===t[o].length;if(i&&!n&&(u="greedy"===i?""===t[o].join("").trim():1===t[o].length&&0===t[o][0].length),"greedy"===i&&n){for(var f=[],l=0;l<h;l++){var c=s?e[l]:l;f.push(t[o][c])}u=""===f.join("").trim()}if(!u){for(var p=0;p<h;p++){0<p&&!d&&(r+=m);var g=n&&s?e[p]:p;r+=k(t[o][g],p)}o<t.length-1&&(!i||0<h&&!d)&&(r+=y)}}return r}function k(e,t){var i,r;return null==e?"":e.constructor===Date?JSON.stringify(e).slice(1,25):(r=!1,o&&"string"==typeof e&&o.test(e)&&(e="'"+e,r=!0),i=e.toString().replace(h,a),(r=r||!0===n||"function"==typeof n&&n(e,t)||Array.isArray(n)&&n[t]||((e,t)=>{for(var i=0;i<t.length;i++)if(-1<e.indexOf(t[i]))return!0;return!1})(i,v.BAD_DELIMITERS)||-1<i.indexOf(m)||" "===i.charAt(0)||" "===i.charAt(i.length-1))?s+i+s:i)}},v.RECORD_SEP=String.fromCharCode(30),v.UNIT_SEP=String.fromCharCode(31),v.BYTE_ORDER_MARK="\ufeff",v.BAD_DELIMITERS=["\r","\n",'"',v.BYTE_ORDER_MARK],v.WORKERS_SUPPORTED=!s&&!!n.Worker,v.NODE_STREAM_INPUT=1,v.LocalChunkSize=10485760,v.RemoteChunkSize=5242880,v.DefaultDelimiter=",",v.Parser=E,v.ParserHandle=i,v.NetworkStreamer=f,v.FileStreamer=l,v.StringStreamer=c,v.ReadableStreamStreamer=p,n.jQuery&&((d=n.jQuery).fn.parse=function(o){var i=o.config||{},h=[];return this.each(function(e){if(!("INPUT"===d(this).prop("tagName").toUpperCase()&&"file"===d(this).attr("type").toLowerCase()&&n.FileReader)||!this.files||0===this.files.length)return!0;for(var t=0;t<this.files.length;t++)h.push({file:this.files[t],inputElem:this,instanceConfig:d.extend({},i)})}),e(),this;function e(){if(0===h.length)U(o.complete)&&o.complete();else{var e,t,i,r,n=h[0];if(U(o.before)){var s=o.before(n.file,n.inputElem);if("object"==typeof s){if("abort"===s.action)return e="AbortError",t=n.file,i=n.inputElem,r=s.reason,void(U(o.error)&&o.error({name:e},t,i,r));if("skip"===s.action)return void u();"object"==typeof s.config&&(n.instanceConfig=d.extend(n.instanceConfig,s.config))}else if("skip"===s)return void u()}var a=n.instanceConfig.complete;n.instanceConfig.complete=function(e){U(a)&&a(e,n.file,n.inputElem),u()},v.parse(n.file,n.instanceConfig)}}function u(){h.splice(0,1),e()}}),a&&(n.onmessage=function(e){e=e.data;void 0===v.WORKER_ID&&e&&(v.WORKER_ID=e.workerId);"string"==typeof e.input?n.postMessage({workerId:v.WORKER_ID,results:v.parse(e.input,e.config),finished:!0}):(n.File&&e.input instanceof File||e.input instanceof Object)&&(e=v.parse(e.input,e.config))&&n.postMessage({workerId:v.WORKER_ID,results:e,finished:!0})}),(f.prototype=Object.create(u.prototype)).constructor=f,(l.prototype=Object.create(u.prototype)).constructor=l,(c.prototype=Object.create(c.prototype)).constructor=c,(p.prototype=Object.create(u.prototype)).constructor=p,v});</script>
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+var attendeesRows = [], notesRows = [], practitioners = [];
+var attendeesReady = false, notesReady = false;
+var currentPatients = [], currentDay = '', currentBlock = '', currentPrac = '';
+
+var BLOCKS = {
+  morning:   {label:'morning',   start:6,  end:12},
+  midday:    {label:'midday',    start:12, end:15},
+  afternoon: {label:'afternoon', start:15, end:18},
+  evening:   {label:'evening',   start:18, end:21}
+};
+
+// ── File upload ───────────────────────────────────────────────────────────────
+document.getElementById('attendeesInput').addEventListener('change', function() {
+  if (this.files[0]) readCSV(this.files[0], 'attendeesZone', 'attendeesText', 'attendeesSub', 'Attendees CSV', function(rows) {
+    attendeesRows = rows;
+    attendeesReady = true;
+    practitioners = [];
+    rows.forEach(function(r) { if (r['Practitioner'] && practitioners.indexOf(r['Practitioner']) === -1) practitioners.push(r['Practitioner']); });
+    practitioners.sort();
+    var sel = document.getElementById('slotPrac');
+    sel.innerHTML = '<option value="">All practitioners</option>' + practitioners.map(function(p) { return '<option value="' + p + '">' + p + '</option>'; }).join('');
+    checkReady();
+  });
+});
+
+document.getElementById('notesInput').addEventListener('change', function() {
+  if (this.files[0]) readCSV(this.files[0], 'notesZone', 'notesText', 'notesSub', 'Treatment Notes CSV', function(rows) {
+    notesRows = rows;
+    notesReady = true;
+    checkReady();
+  });
+});
+
+function readCSV(file, zoneId, textId, subId, label, onLoad) {
+  var zone = document.getElementById(zoneId);
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var text = e.target.result;
+    var rows;
+    if (typeof Papa !== 'undefined') {
+      var result = Papa.parse(text, {header: true, skipEmptyLines: true});
+      rows = result.data;
+    } else {
+      rows = fallbackCSV(text);
+    }
+    zone.classList.add('loaded');
+    document.getElementById(textId).innerHTML = '<span class="loaded-text">&#x2713; ' + label + ' loaded</span>';
+    document.getElementById(subId).textContent = rows.length.toLocaleString() + ' records';
+    onLoad(rows);
+  };
+  reader.onerror = function() { alert('Could not read file. Please try again.'); };
+  reader.readAsText(file);
+}
+
+function fallbackCSV(text) {
+  var lines = text.split('\r\n');
+  if (lines.length < 2) lines = text.split('\n');
+  var headers = splitLine(lines[0]).map(function(h) { return h.replace(/^\uFEFF/, '').trim(); });
+  var rows = [];
+  for (var i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    var vals = splitLine(lines[i]);
+    var row = {};
+    headers.forEach(function(h, j) { row[h] = vals[j] || ''; });
+    rows.push(row);
+  }
+  return rows;
+}
+
+function splitLine(line) {
+  var result = [], cur = '', inQ = false;
+  for (var i = 0; i < line.length; i++) {
+    var c = line[i];
+    if (c === '"') { inQ = !inQ; }
+    else if (c === ',' && !inQ) { result.push(cur.trim()); cur = ''; }
+    else { cur += c; }
+  }
+  result.push(cur.trim());
+  return result;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function checkReady() {
+  var ok = attendeesReady && document.getElementById('slotDay').value && document.getElementById('slotBlock').value && document.getElementById('slotBiz').value;
+  document.getElementById('findBtn').disabled = !ok;
+}
+
+function stripHtml(t) {
+  return t.replace(/<[^>]+>/g, ' ').replace(/\u200b/g, '').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim();
+}
+
+function extractComplaint(text) {
+  if (!text || typeof text !== 'string') return null;
+  // Try each label variant separately to avoid complex regex
+  var labels = [
+    'Presenting Complaint',
+    'Patient Progress/Complaint',
+    'Patient Progress/complaint',
+    'Patient Progress report/complaint',
+    'Reason for visit'
+  ];
+  var m = null;
+  for (var li = 0; li < labels.length; li++) {
+    var tag = '[Question: ' + labels[li] + ']';
+    var idx = text.indexOf(tag);
+    if (idx === -1) continue;
+    var start = idx + tag.length;
+    var nextQ = text.indexOf('[Question:', start);
+    var chunk = nextQ === -1 ? text.slice(start) : text.slice(start, nextQ);
+    m = chunk;
+    break;
+  }
+  if (!m) return null;
+  var raw = stripHtml(m).trim().replace(/^\*\*.*?\*\*\s*/g,'').replace(/^PTS\s*[-\u2013]\s*/i,'').trim();
+  return raw.length >= 8 ? raw.slice(0, 400) : null;
+}
+
+function getComplaint(patientId) {
+  if (!notesReady || !notesRows.length) return null;
+  var pid = String(patientId).trim();
+  var pnotes = notesRows.filter(function(r) { return String(r['Patient ID'] || '').trim() === pid && r['Text']; });
+  pnotes.sort(function(a, b) { return (b['CreatedAt'] || '').localeCompare(a['CreatedAt'] || ''); });
+  for (var i = 0; i < pnotes.length; i++) {
+    var c = extractComplaint(pnotes[i]['Text']);
+    if (c) return c;
+  }
+  return null;
+}
+
+function parseSlotDate(row) {
+  var s = row['Start Time'];
+  if (!s) return null;
+  var m = s.match(/^(\d{4}-\d{2}-\d{2}) (\d{2}):(\d{2})/);
+  if (!m) return null;
+  var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var d = new Date(m[1]);
+  return {day: days[d.getUTCDay()], hour: parseInt(m[2]), minute: parseInt(m[3])};
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return 'Unknown';
+  var d = new Date(dateStr);
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return d.getUTCDate() + ' ' + months[d.getUTCMonth()] + ' ' + d.getUTCFullYear();
+}
+
+function weeksAgo(dateStr) {
+  var d = new Date(dateStr);
+  return Math.floor((Date.now() - d.getTime()) / (1000*60*60*24*7));
+}
+
+function recencyDot(dateStr) {
+  var w = weeksAgo(dateStr);
+  if (w <= 13) return 'dot-hot';
+  if (w <= 52) return 'dot-warm';
+  return 'dot-cold';
+}
+
+function recencyLabel(dateStr) {
+  var w = weeksAgo(dateStr);
+  if (w <= 4) return 'Within last month';
+  if (w <= 13) return '~' + w + ' weeks ago';
+  if (w <= 52) return '~' + Math.round(w/4) + ' months ago';
+  return '~' + Math.round(w/52) + ' year' + (Math.round(w/52) > 1 ? 's' : '') + ' ago';
+}
+
+function initials(name) {
+  return name.split(' ').map(function(n) { return n[0]; }).join('').toUpperCase().slice(0,2);
+}
+
+function formatBlock(b) {
+  var map = {morning:'morning',midday:'midday',afternoon:'afternoon',evening:'evening'};
+  return map[b] || b;
+}
+
+// ── Find patients ─────────────────────────────────────────────────────────────
+function findPatients() {
+  var day = document.getElementById('slotDay').value;
+  var blockKey = document.getElementById('slotBlock').value;
+  var prac = document.getElementById('slotPrac').value;
+  var selectedBiz = document.getElementById('slotBiz').value;
+  if (!day || !blockKey || !selectedBiz) { alert('Please select a day, time block and clinic.'); return; }
+
+  var block = BLOCKS[blockKey];
+  currentDay = day; currentBlock = blockKey; currentPrac = prac;
+
+  var notCancelled = attendeesRows.filter(function(r) {
+    return !r['Cancellation Time'] || !r['Cancellation Time'].trim();
+  });
+
+  var matched = notCancelled.filter(function(r) {
+    var p = parseSlotDate(r);
+    if (!p) return false;
+    if (p.day !== day) return false;
+    if (p.hour < block.start || p.hour >= block.end) return false;
+    if (prac && r['Practitioner'] !== prac) return false;
+    return true;
+  });
+
+  // Build set of patients who already have a future appointment
+  var today = new Date().toISOString().slice(0, 10);
+  var hasUpcoming = {};
+  attendeesRows.forEach(function(r) {
+    if (r['Cancellation Time'] && r['Cancellation Time'].trim()) return;
+    var id = String(r['Patient ID'] || '').trim();
+    var s = r['Start Time'];
+    if (!id || !s) return;
+    if (s.slice(0, 10) > today) hasUpcoming[id] = true;
+  });
+
+  // Build overall last-visit lookup including last practitioner and last business
+  var lastVisitLookup = {};
+  var lastPracLookup = {};
+  var lastBizLookup = {};
+  attendeesRows.forEach(function(r) {
+    if (r['Cancellation Time'] && r['Cancellation Time'].trim()) return;
+    var id = String(r['Patient ID'] || '').trim();
+    var s = r['Start Time'];
+    if (!id || !s) return;
+    var d = s.slice(0, 10);
+    if (!lastVisitLookup[id] || d > lastVisitLookup[id]) {
+      lastVisitLookup[id] = d;
+      lastPracLookup[id] = r['Practitioner'] || '';
+      lastBizLookup[id] = r['Business'] || '';
+    }
+  });
+
+  var byPatient = {};
+  matched.forEach(function(r) {
+    var id = String(r['Patient ID'] || '').trim();
+    var name = r['Patient'];
+    var s = r['Start Time'];
+    if (!id || !name || !s) return;
+    var dateStr = s.slice(0, 10);
+    if (!byPatient[id]) byPatient[id] = {id:id, name:name, email:r['Patient Email']||'', dates:[]};
+    byPatient[id].dates.push(dateStr);
+  });
+
+  currentPatients = Object.keys(byPatient).filter(function(id) {
+    if (hasUpcoming[id]) return false;
+    if (byPatient[id].dates.length < 2) return false;
+    // Must have last visited same business as selected clinic
+    if (lastBizLookup[id] !== selectedBiz) return false;
+    // Must have last visited same practitioner if one selected
+    if (prac && lastPracLookup[id] !== prac) return false;
+    return true;
+  }).map(function(id) {
+    var p = byPatient[id];
+    p.dates.sort(function(a,b) { return b.slice(0,10).localeCompare(a.slice(0,10)); });
+    p.lastSlotVisit = p.dates[0];
+    p.lastVisit = lastVisitLookup[id] || p.dates[0];
+    p.lastPrac = lastPracLookup[id] || '';
+    p.lastBiz = lastBizLookup[id] || '';
+    p.visitCount = p.dates.length;
+    p.complaint = getComplaint(id);
+    return p;
+  });
+
+  currentPatients.sort(function(a,b) {
+    var wa = weeksAgo(a.lastVisit), wb = weeksAgo(b.lastVisit);
+    return wa !== wb ? wa - wb : b.visitCount - a.visitCount;
+  });
+
+  renderResults();
+}
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderResults() {
+  var section = document.getElementById('resultsSection');
+  var divider = document.getElementById('resultsDivider');
+  var list = document.getElementById('resultsList');
+  var countEl = document.getElementById('resultsCount');
+
+  section.style.display = 'block';
+  divider.style.display = 'block';
+  list.innerHTML = '';
+  countEl.textContent = currentPatients.length + ' patient' + (currentPatients.length !== 1 ? 's' : '') + ' found';
+  section.scrollIntoView({behavior:'smooth', block:'start'});
+
+  if (!currentPatients.length) {
+    list.innerHTML = '<div class="empty-state"><p>No patients found for this slot.</p><p style="margin-top:.5rem;font-size:13px">Try adjusting the day, block, or removing the practitioner filter.</p></div>';
+    return;
+  }
+
+  currentPatients.forEach(function(p, i) {
+    var shortC = p.complaint ? p.complaint.slice(0,90) + (p.complaint.length > 90 ? '...' : '') : null;
+    var card = document.createElement('div');
+    card.className = 'patient-card';
+    card.id = 'card-' + i;
+    card.innerHTML =
+      '<div class="card-header" onclick="toggleCard(' + i + ')">' +
+        '<div class="patient-info">' +
+          '<div class="avatar">' + initials(p.name) + '</div>' +
+          '<div><div class="patient-name">' + p.name + '</div>' +
+          '<div class="patient-meta">' + (p.email || 'No email on file') + '</div></div>' +
+        '</div>' +
+        '<div class="card-stats">' +
+          '<div class="stat"><div class="stat-value">' + p.visitCount + '</div><div class="stat-label">visits at slot</div></div>' +
+          '<div class="stat"><div class="stat-value" style="font-size:13px;font-weight:400;color:var(--ink-mid)">' + formatDate(p.lastVisit) + '</div><div class="stat-label">last visit</div></div>' +
+          '<span class="dot ' + recencyDot(p.lastVisit) + '"></span>' +
+          '<span class="chevron" id="chev-' + i + '">&#x203A;</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="card-body" id="body-' + i + '">' +
+        (shortC ? '<div class="complaint-pill">&#x1F4CC; ' + shortC + '</div>' : '') +
+        '<div class="tab-row">' +
+          '<button class="tab-btn active" id="tab-email-' + i + '" onclick="switchTab(' + i + ',0)">&#x2709; Email</button>' +
+          '<button class="tab-btn" id="tab-sms-' + i + '" onclick="switchTab(' + i + ',1)">&#x1F4AC; SMS</button>' +
+        '</div>' +
+        '<div class="section-label" id="lbl-' + i + '">Draft email <span class="ai-badge" id="aibadge-' + i + '" style="display:none">AI written</span></div>' +
+        '<div class="generating" id="gen-' + i + '"><span class="spinner"></span> Writing personalised message...</div>' +
+        '<div id="epane-' + i + '" style="display:none"><div class="email-box" contenteditable="true" id="email-' + i + '"></div></div>' +
+        '<div id="spane-' + i + '" style="display:none"><div class="sms-box" contenteditable="true" id="sms-' + i + '" oninput="updateCC(' + i + ')"></div><div class="char-count" id="cc-' + i + '">0 / 160</div></div>' +
+        '<div class="card-actions" id="acts-' + i + '" style="display:none">' +
+          '<button class="btn-sm" id="copymain-' + i + '" onclick="copyMain(' + i + ',this)">Copy email</button>' +
+          (p.email ? '<button class="btn-sm" data-email="' + p.email + '" onclick="copyAddr(this)">Copy address</button>' : '') +
+          '<button class="btn-sm" id="regen-' + i + '" onclick="regenMsg(' + i + ')">&#x21BA; Regenerate</button>' +
+        '</div>' +
+      '</div>';
+    list.appendChild(card);
+  });
+
+  var done = 0;
+  var total = currentPatients.length;
+  var pw = document.getElementById('progressWrap');
+  var pf = document.getElementById('progressFill');
+  var pl = document.getElementById('progressLabel');
+  pw.style.display = 'block';
+  pf.style.width = '0%';
+  pl.textContent = 'Writing emails... 0 of ' + total;
+
+  currentPatients.forEach(function(p, i) {
+    generateMsg(p, currentDay, currentBlock, currentPrac).then(function(result) {
+      setMsg(i, result.email, result.sms, result.isAI);
+      done++;
+      pf.style.width = Math.round(done/total*100) + '%';
+      pl.textContent = done < total ? 'Writing emails... ' + done + ' of ' + total : '&#x2713; All ' + total + ' emails ready';
+      if (done >= total) setTimeout(function() { pw.style.display = 'none'; }, 2500);
+    });
+  });
+}
+
+// ── Card UI ───────────────────────────────────────────────────────────────────
+function toggleCard(i) {
+  var body = document.getElementById('body-' + i);
+  var chev = document.getElementById('chev-' + i);
+  var open = body.classList.contains('open');
+  body.classList.toggle('open', !open);
+  chev.style.transform = open ? '' : 'rotate(90deg)';
+}
+
+function switchTab(i, tab) {
+  var ep = document.getElementById('epane-' + i);
+  var sp = document.getElementById('spane-' + i);
+  var te = document.getElementById('tab-email-' + i);
+  var ts = document.getElementById('tab-sms-' + i);
+  var lbl = document.getElementById('lbl-' + i);
+  var btn = document.getElementById('copymain-' + i);
+  if (tab === 'email' || tab === 0) {
+    ep.style.display = 'block'; sp.style.display = 'none';
+    te.classList.add('active'); ts.classList.remove('active');
+    if (lbl) lbl.childNodes[0].textContent = 'Draft email ';
+    if (btn) btn.textContent = 'Copy email';
+  } else {
+    ep.style.display = 'none'; sp.style.display = 'block';
+    te.classList.remove('active'); ts.classList.add('active');
+    if (lbl) lbl.childNodes[0].textContent = 'Draft SMS ';
+    if (btn) btn.textContent = 'Copy SMS';
+  }
+}
+
+function setMsg(i, email, sms, isAI) {
+  var gen = document.getElementById('gen-' + i);
+  var emailEl = document.getElementById('email-' + i);
+  var smsEl = document.getElementById('sms-' + i);
+  var ep = document.getElementById('epane-' + i);
+  var acts = document.getElementById('acts-' + i);
+  var badge = document.getElementById('aibadge-' + i);
+  if (gen) gen.style.display = 'none';
+  if (emailEl) emailEl.textContent = email;
+  if (ep) ep.style.display = 'block';
+  if (smsEl) { smsEl.textContent = sms; updateCC(i); }
+  if (acts) acts.style.display = 'flex';
+  if (badge) badge.style.display = isAI ? 'inline' : 'none';
+}
+
+function updateCC(i) {
+  var el = document.getElementById('sms-' + i);
+  var cc = document.getElementById('cc-' + i);
+  if (!el || !cc) return;
+  var len = el.innerText.length;
+  cc.textContent = len + ' / 160';
+  cc.className = 'char-count' + (len > 160 ? ' over' : '');
+}
+
+function copyMain(i, btn) {
+  var ep = document.getElementById('epane-' + i);
+  var isEmail = ep && ep.style.display !== 'none';
+  var el = document.getElementById(isEmail ? 'email-' + i : 'sms-' + i);
+  if (el) copyText(el.innerText, btn, isEmail ? 'Copy email' : 'Copy SMS');
+}
+
+function copyAddr(btn) {
+  var email = btn.getAttribute('data-email');
+  copyText(email, btn, 'Copy address');
+}
+
+function copyText(text, btn, resetLabel) {
+  navigator.clipboard.writeText(text).then(function() {
+    btn.textContent = 'Copied!'; btn.classList.add('copied');
+    setTimeout(function() { btn.textContent = resetLabel; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+function regenMsg(i) {
+  var btn = document.getElementById('regen-' + i);
+  var ep = document.getElementById('epane-' + i);
+  var gen = document.getElementById('gen-' + i);
+  var acts = document.getElementById('acts-' + i);
+  btn.disabled = true;
+  ep.style.display = 'none';
+  acts.style.display = 'none';
+  gen.style.display = 'flex';
+  var p = currentPatients[i];
+  generateMsg(p, currentDay, currentBlock, currentPrac).then(function(result) {
+    setMsg(i, result.email, result.sms, result.isAI);
+    btn.disabled = false;
+  });
+}
+
+// ── AI generation ─────────────────────────────────────────────────────────────
+function buildSMS(firstName, pracFirst, day, blockLabel, complaint) {
+  var issue = complaint ? ' We wanted to check in on how you are going.' : '';
+  return 'Hi ' + firstName + ', it\'s the team at Greenvale Osteopathy. We have a ' + day + ' ' + blockLabel + ' spot available with ' + pracFirst + ' this week that suits your usual schedule.' + issue + ' Book here: [BOOKING LINK]';
+}
+
+function fallbackEmail(firstName, pracFirst, day, blockLabel, complaint) {
+  if (complaint) {
+    return 'Hi ' + firstName + ',\n\nIt\'s been a while since your last visit, and we wanted to check in. We have a ' + day + ' ' + blockLabel + ' spot available with ' + pracFirst + ' this week that suits your usual schedule.\n\nIf you\'ve been meaning to come back in, now\'s a great time. Simply reply to this email or book online through our patient portal.\n\nLooking forward to seeing you soon.';
+  }
+  return 'Hi ' + firstName + ',\n\nWe hope you\'re going well! We have a ' + day + ' ' + blockLabel + ' appointment available with ' + pracFirst + ' this week and thought of you.\n\nIf you\'ve been meaning to come back in, now\'s a great time. Simply reply to this email or book online.\n\nLooking forward to seeing you soon.';
+}
+
+async function generateMsg(patient, day, blockKey, prac) {
+  var apiKey = (document.getElementById('apiKey') ? document.getElementById('apiKey').value : '').trim();
+  var firstName = patient.name.split(' ')[0];
+  var pracFirst = prac ? prac.split(' ')[0] : 'your practitioner';
+  var blockLabel = BLOCKS[blockKey] ? BLOCKS[blockKey].label : blockKey;
+
+  const systemPrompt = `You are a warm, professional patient care coordinator at Greenvale Osteopathy, writing brief re-engagement emails to patients who haven't visited recently.
+
+CLINICAL SHORTHAND TRANSLATION GUIDE — always convert these before writing:
+Anatomical locations:
+- Cx / cervical = neck
+- Lx / lumbar / LBP / LS = lower back
+- Tx / thoracic = mid/upper back
+- SIJ / SI joint = sacroiliac joint (lower back/pelvis area)
+- GH = shoulder joint
+- OA = base of skull / top of neck
+- CD = neck and head area
+- UEx / Uex = upper arm/shoulder area
+- LEX / Lex = leg
+- Bilat / B / bilaterally = both sides
+- Ant = front, Post = back/posterior, Lat = side, Med = inner side
+- R / Rt / RHS = right side, L / Lt / LHS = left side
+- Traps / trap = trapezius (the muscles across shoulders and neck)
+- Gluts / glutes / glut med = buttock muscles
+- Hams / hammys = hamstrings
+- Pecs = chest muscles
+- SCM / lev scap / QL = specific neck/back muscles (just say "neck muscles" or "back muscles")
+- RC = rotator cuff (shoulder)
+- Psoas = deep hip flexor muscle (say "hip")
+- ITB = outer thigh/hip band
+
+Clinical shorthand:
+- S / Site = location of pain
+- N / Nature / Q = type/quality of pain  
+- I / Intensity = pain severity (e.g. 6/10 = moderate pain)
+- O / Onset / D = when it started
+- Agg = what makes it worse
+- Rel = what gives relief
+- Assoc = associated symptoms
+- MS / M/S = nerve symptoms (pins and needles, numbness)
+- NAR = no apparent reason (came on without a specific cause)
+- DP / PSO = how pain presents day to day
+- HAs = headaches
+- BB changes = bowel/bladder changes
+- TTT / ttt / tx / Ttx = treatment session (their appointment with us)
+- PTS = patient says / patient reports
+- EPC = Medicare care plan (GP referral)
+- /52 = weeks (e.g. 2/52 = 2 weeks ago)
+- /12 = months (e.g. 3/12 = 3 months ago)
+- /7 = days (e.g. 5/7 = 5 days ago)
+- Ssx / ssx = symptoms
+- WFH = working from home
+- NAD = no abnormality detected (nothing concerning)
+- Maintenance appt = routine maintenance visit
+
+Body regions in plain English:
+- "post" + body part = back of that area (e.g. "post shoulder" = back of shoulder)
+- "ant" + body part = front of that area
+
+WRITING RULES:
+- Extract the core issue (body part + what the problem feels like) in one natural sentence
+- If it's a return visit note with "much better" / "all settled" / "doing well" / "no issues", this patient improved — acknowledge they're likely feeling better and invite them to maintain progress
+- If it mentions stress, work demands, or lifestyle factors, you may gently reference those
+- Never use clinical scores like "6/10" or abbreviations like "R>L"
+- Never mention specific vertebrae, disc levels, or diagnostic terms
+- Keep the issue reference brief — one sentence max, woven naturally into the email
+- Tone: warm, personal, not salesy. Like a thoughtful practitioner who remembers them`;
+
+  var prompt = patient.complaint
+    ? systemPrompt + '\n\n---\nPatient first name: ' + firstName + '\nPractitioner first name: ' + pracFirst + '\nAvailable slot: ' + day + ' ' + blockLabel + '\nRaw clinical note: """' + patient.complaint + '"""\n\nWrite a 4-5 sentence re-engagement email body. No subject line. No sign-off block. Plain text only. Then write exactly:\n---\nThen a 1-sentence SMS under 140 chars ending with [BOOKING LINK].'
+    : 'Write a short warm re-engagement email (4 sentences) from Greenvale Osteopathy to ' + firstName + ' about a ' + day + ' ' + blockLabel + ' appointment with ' + pracFirst + '. Plain text only, no subject, no sign-off. Then write exactly:\n---\nThen a 1-sentence SMS under 140 chars ending with [BOOKING LINK].';
+
+  if (!apiKey) {
+    return {
+      email: fallbackEmail(firstName, pracFirst, day, blockLabel, patient.complaint),
+      sms: buildSMS(firstName, pracFirst, day, blockLabel, patient.complaint),
+      isAI: false
+    };
+  }
+
+  try {
+    var resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-allow-browser': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        messages: [{role:'user', content: prompt}]
+      })
+    });
+    var data = await resp.json();
+    var text = data.content && data.content[0] && data.content[0].text ? data.content[0].text.trim() : null;
+    if (text && text.length > 40) {
+      var parts = text.split(/\n---\n/);
+      return {email: parts[0].trim(), sms: parts[1] ? parts[1].trim() : buildSMS(firstName, pracFirst, day, blockLabel, patient.complaint), isAI: true};
+    }
+  } catch(e) {}
+
+  return {
+    email: fallbackEmail(firstName, pracFirst, day, blockLabel, patient.complaint),
+    sms: buildSMS(firstName, pracFirst, day, blockLabel, patient.complaint),
+    isAI: false
+  };
+}
+</script>
+</body>
+</html>
