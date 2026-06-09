@@ -2224,18 +2224,19 @@ async function testCliniko() {
 // Store loaded appointments and gaps globally
 var clinikoAppointments = [];
 var clinikoGaps = [];
+var clinikoAvailabilities = []; // practitioner working hours
 
 async function loadGaps() {
   var statusEl = document.getElementById('clinikoStatus');
   statusEl.style.color = 'var(--ink-light)';
-  statusEl.textContent = 'Loading this week\'s schedule...';
+  statusEl.textContent = 'Loading schedule and working hours...';
 
   try {
     var today = new Date();
     // Get Monday of current week
     var monday = new Date(today);
-    var day = monday.getDay();
-    var diff = day === 0 ? -6 : 1 - day;
+    var dayOfWeek = monday.getDay();
+    var diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
     monday.setDate(monday.getDate() + diff);
     monday.setHours(0,0,0,0);
     var sunday = new Date(monday);
@@ -2244,7 +2245,38 @@ async function loadGaps() {
 
     var fmt = function(d) { return d.toISOString().split('.')[0] + 'Z'; };
 
-    // Load all appointments for the week (paginate if needed)
+    // Step 1: Load practitioners
+    statusEl.textContent = 'Loading practitioners...';
+    var pracData = await clinikoGet('practitioners');
+    if (!pracData || !pracData.practitioners) {
+      statusEl.style.color = '#c0392b';
+      statusEl.textContent = '✗ Could not load practitioners';
+      return;
+    }
+    var practitioners = pracData.practitioners;
+    var pracIdToName = {};
+    practitioners.forEach(function(p) { pracIdToName[p.id] = p.first_name + ' ' + p.last_name; });
+
+    // Step 2: Load daily availabilities for each practitioner
+    statusEl.textContent = 'Loading working hours for ' + practitioners.length + ' practitioners...';
+    clinikoAvailabilities = [];
+    for (var pi = 0; pi < practitioners.length; pi++) {
+      var prac = practitioners[pi];
+      var availData = await clinikoGet('practitioners/' + prac.id + '/daily_availabilities');
+      if (availData && availData.daily_availabilities) {
+        availData.daily_availabilities.forEach(function(da) {
+          clinikoAvailabilities.push({
+            pracId: prac.id,
+            pracName: pracIdToName[prac.id],
+            dayOfWeek: da.day_of_week, // 1=Mon, 2=Tue... 7=Sun in Cliniko
+            availabilities: da.availabilities || []
+          });
+        });
+      }
+    }
+
+    // Step 3: Load appointments for the week (paginate)
+    statusEl.textContent = 'Loading this week\'s appointments...';
     var allAppts = [];
     var page = 1;
     while (true) {
@@ -2252,94 +2284,117 @@ async function loadGaps() {
                    '&q[]=' + encodeURIComponent('starts_at:<' + fmt(sunday)) +
                    '&per_page=100&page=' + page;
       var data = await clinikoGet('individual_appointments', params);
-      if (!data || !data.individual_appointments) {
-        if (page === 1) {
-          var keys = data ? Object.keys(data).join(', ') : 'null';
-          var err = (data && data.error) ? JSON.stringify(data.error) : 'no error';
-          statusEl.style.color = '#c0392b';
-          statusEl.textContent = '✗ Keys: ' + keys + ' | ' + err;
-          return;
-        }
-        break;
-      }
+      if (!data || !data.individual_appointments) break;
       allAppts = allAppts.concat(data.individual_appointments);
       if (allAppts.length >= data.total_entries || data.individual_appointments.length < 100) break;
       page++;
     }
-
     clinikoAppointments = allAppts;
-    statusEl.style.color = 'var(--sage)';
 
-    // Also load practitioners to get their IDs
-    var pracData = await clinikoGet('practitioners');
-    var pracMap = {};
-    if (pracData && pracData.practitioners) {
-      pracData.practitioners.forEach(function(p) {
-        pracMap[p.links.self.split('/').pop()] = p.first_name + ' ' + p.last_name;
+    // Step 4: Get businesses
+    var bizData = await clinikoGet('businesses');
+    var bizIdToName = {};
+    if (bizData && bizData.businesses) {
+      bizData.businesses.forEach(function(b) { bizIdToName[b.id] = b.name; });
+    }
+
+    // Step 5: Calculate real gaps using working hours
+    // Cliniko day_of_week: 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat, 7=Sun
+    var clinikoDay = {Monday:1,Tuesday:2,Wednesday:3,Thursday:4,Friday:5,Saturday:6,Sunday:7};
+    var jsDay = {Monday:1,Tuesday:2,Wednesday:3,Thursday:4,Friday:5,Saturday:6,Sunday:0};
+
+    // Build booked slots lookup: pracId+date -> array of {startMins, endMins}
+    var bookedByPracDate = {};
+    allAppts.forEach(function(a) {
+      if (a.cancelled_at || a.deleted_at) return;
+      var pracId = a.practitioner ? a.practitioner.links.self.split('/').pop() : null;
+      if (!pracId) return;
+      var start = new Date(a.starts_at);
+      var end = new Date(a.ends_at);
+      var dateKey = start.toISOString().slice(0,10);
+      var key = pracId + '|' + dateKey;
+      if (!bookedByPracDate[key]) bookedByPracDate[key] = [];
+      bookedByPracDate[key].push({
+        startMins: start.getHours() * 60 + start.getMinutes(),
+        endMins: end.getHours() * 60 + end.getMinutes(),
+        bizId: a.business ? a.business.links.self.split('/').pop() : ''
+      });
+    });
+
+    // Walk each day of the week
+    clinikoGaps = [];
+    var dayNames = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+    
+    for (var d = 0; d < 7; d++) {
+      var dayName = dayNames[d];
+      var dateForDay = new Date(monday);
+      dateForDay.setDate(monday.getDate() + d);
+      var dateStr = dateForDay.toISOString().slice(0,10);
+      var clDay = clinikoDay[dayName];
+
+      // Find all practitioner availabilities for this day
+      clinikoAvailabilities.forEach(function(avail) {
+        if (avail.dayOfWeek !== clDay) return;
+        if (!avail.availabilities.length) return;
+
+        var key = avail.pracId + '|' + dateStr;
+        var booked = bookedByPracDate[key] || [];
+
+        // Walk each availability window in 40-min increments
+        avail.availabilities.forEach(function(window) {
+          var winStartMins = parseInt(window.starts_at.split(':')[0]) * 60 + parseInt(window.starts_at.split(':')[1]);
+          var winEndMins = parseInt(window.ends_at.split(':')[0]) * 60 + parseInt(window.ends_at.split(':')[1]);
+
+          var cursor = winStartMins;
+          while (cursor + 40 <= winEndMins) {
+            var slotEnd = cursor + 40;
+            // Check if this 40-min window overlaps with any booked appointment
+            var isBooked = booked.some(function(b) {
+              return b.startMins < slotEnd && b.endMins > cursor;
+            });
+            if (!isBooked) {
+              var h = Math.floor(cursor / 60);
+              var m = cursor % 60;
+              var ap = h >= 12 ? 'pm' : 'am';
+              var h12 = h % 12 || 12;
+              var mStr = m < 10 ? '0' + m : '' + m;
+              var timeLabel = h12 + ':' + mStr + ap;
+              var blockKey = 'exact-' + (h < 10 ? '0' + h : h) + ':' + mStr;
+
+              clinikoGaps.push({
+                pracId: avail.pracId,
+                pracName: avail.pracName,
+                date: dateStr,
+                dayName: dayName,
+                startMins: cursor,
+                label: timeLabel,
+                blockKey: blockKey
+              });
+            }
+            cursor += 40;
+          }
+        });
       });
     }
 
-    // Build gaps: for each practitioner, find booked slots and infer gaps
-    // Group appointments by practitioner + date
-    var scheduleByPracDate = {};
-    allAppts.forEach(function(a) {
-      if (a.cancelled_at || a.deleted_at) return;
-      var pracId = a.practitioner ? a.practitioner.links.self.split('/').pop() : 'unknown';
-      var start = new Date(a.starts_at);
-      var dateKey = start.toISOString().split('T')[0];
-      var key = pracId + '|' + dateKey;
-      if (!scheduleByPracDate[key]) scheduleByPracDate[key] = { pracId: pracId, date: dateKey, slots: [] };
-      scheduleByPracDate[key].slots.push({ start: start, end: new Date(a.ends_at) });
-    });
-
-    // Find gaps within each practitioner's day
-    // A gap is a 40-min window between the first and last appointment of the day
-    // that has no appointment
-    clinikoGaps = [];
-    Object.values(scheduleByPracDate).forEach(function(pd) {
-      var slots = pd.slots.sort(function(a,b) { return a.start - b.start; });
-      var dayStart = slots[0].start;
-      var dayEnd = slots[slots.length-1].end;
-      var pracName = pracMap[pd.pracId] || pd.pracId;
-
-      // Walk through the day in 40-min increments
-      var cursor = new Date(dayStart);
-      while (cursor < dayEnd) {
-        var slotEnd = new Date(cursor.getTime() + 40 * 60000);
-        // Check if this window is free
-        var isBooked = slots.some(function(s) {
-          return s.start < slotEnd && s.end > cursor;
-        });
-        if (!isBooked) {
-          var dateObj = new Date(pd.date + 'T00:00:00');
-          clinikoGaps.push({
-            pracId: pd.pracId,
-            pracName: pracName,
-            date: pd.date,
-            dayName: dateObj.toLocaleDateString('en-AU', {weekday:'long'}),
-            startTime: new Date(cursor),
-            label: cursor.toLocaleTimeString('en-AU', {hour:'numeric',minute:'2-digit',hour12:true}).toLowerCase().replace(' ','')
-          });
-        }
-        cursor = new Date(cursor.getTime() + 40 * 60000);
-      }
-    });
-
-    // Populate the slot dropdowns with actual gaps
+    // Populate dropdowns
     populateGapDropdowns();
 
+    // Summary
     var byDay = {};
     allAppts.forEach(function(a) {
       if (a.cancelled_at || a.deleted_at) return;
-      var d = new Date(a.starts_at).toLocaleDateString('en-AU', {weekday:'long'});
+      var d = new Date(a.starts_at).toLocaleDateString('en-AU', {weekday:'short'});
       byDay[d] = (byDay[d] || 0) + 1;
     });
-    var summary = Object.keys(byDay).sort().map(function(d) { return d + ': ' + byDay[d]; }).join(' | ');
-    statusEl.textContent = '✓ Loaded ' + allAppts.length + ' appointments · ' + clinikoGaps.length + ' gaps found — ' + summary;
+    var summary = Object.keys(byDay).map(function(d) { return d + ': ' + byDay[d]; }).join(' | ');
+    statusEl.style.color = 'var(--sage)';
+    statusEl.textContent = '✓ ' + allAppts.length + ' appointments · ' + clinikoGaps.length + ' real gaps found — ' + summary;
 
   } catch(e) {
     statusEl.style.color = '#c0392b';
     statusEl.textContent = '✗ ' + e.message;
+    console.error(e);
   }
 }
 
