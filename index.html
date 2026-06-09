@@ -2209,7 +2209,14 @@ async function loadGaps() {
     var pracIdToName = {};
     practitioners.forEach(function(p) { pracIdToName[p.id] = p.first_name + ' ' + p.last_name; });
 
-    // Step 2: Load daily availabilities for each practitioner
+    // Step 2: Load businesses FIRST so bizIdToName is ready
+    var bizData = await clinikoGet('businesses');
+    var bizIdToName = {};
+    if (bizData && bizData.businesses) {
+      bizData.businesses.forEach(function(b) { bizIdToName[b.id] = b.name; });
+    }
+
+    // Step 3: Load daily availabilities for each practitioner
     statusEl.textContent = 'Loading working hours for ' + practitioners.length + ' practitioners...';
     clinikoAvailabilities = [];
     for (var pi = 0; pi < practitioners.length; pi++) {
@@ -2246,14 +2253,7 @@ async function loadGaps() {
     }
     clinikoAppointments = allAppts;
 
-    // Step 4: Get businesses
-    var bizData = await clinikoGet('businesses');
-    var bizIdToName = {};
-    if (bizData && bizData.businesses) {
-      bizData.businesses.forEach(function(b) { bizIdToName[b.id] = b.name; });
-    }
-
-    // Step 5: Calculate real gaps using working hours
+    // Step 4: Calculate real gaps using working hours
     // Cliniko day_of_week: 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat, 7=Sun
     var clinikoDay = {Monday:1,Tuesday:2,Wednesday:3,Thursday:4,Friday:5,Saturday:6,Sunday:7};
     var jsDay = {Monday:1,Tuesday:2,Wednesday:3,Thursday:4,Friday:5,Saturday:6,Sunday:0};
@@ -4032,7 +4032,14 @@ async function loadGaps() {
     var pracIdToName = {};
     practitioners.forEach(function(p) { pracIdToName[p.id] = p.first_name + ' ' + p.last_name; });
 
-    // Step 2: Load daily availabilities for each practitioner
+    // Step 2: Load businesses FIRST so bizIdToName is ready
+    var bizData = await clinikoGet('businesses');
+    var bizIdToName = {};
+    if (bizData && bizData.businesses) {
+      bizData.businesses.forEach(function(b) { bizIdToName[b.id] = b.name; });
+    }
+
+    // Step 3: Load daily availabilities for each practitioner
     statusEl.textContent = 'Loading working hours for ' + practitioners.length + ' practitioners...';
     clinikoAvailabilities = [];
     for (var pi = 0; pi < practitioners.length; pi++) {
@@ -4069,14 +4076,7 @@ async function loadGaps() {
     }
     clinikoAppointments = allAppts;
 
-    // Step 4: Get businesses
-    var bizData = await clinikoGet('businesses');
-    var bizIdToName = {};
-    if (bizData && bizData.businesses) {
-      bizData.businesses.forEach(function(b) { bizIdToName[b.id] = b.name; });
-    }
-
-    // Step 5: Calculate real gaps using working hours
+    // Step 4: Calculate real gaps using working hours
     // Cliniko day_of_week: 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat, 7=Sun
     var clinikoDay = {Monday:1,Tuesday:2,Wednesday:3,Thursday:4,Friday:5,Saturday:6,Sunday:7};
     var jsDay = {Monday:1,Tuesday:2,Wednesday:3,Thursday:4,Friday:5,Saturday:6,Sunday:0};
