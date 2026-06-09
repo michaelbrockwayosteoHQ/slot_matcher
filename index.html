@@ -1870,7 +1870,7 @@ async function loadGaps() {
     sunday.setDate(monday.getDate() + 6);
 
     var fmt = function(d) { return d.toISOString().split('.')[0] + 'Z'; };
-    var params = 'q[appointment_start][gt_eq]=' + fmt(monday) + '&q[appointment_start][lt_eq]=' + fmt(sunday) + '&per_page=100';
+    var params = 'q[starts_at][gt_eq]=' + fmt(monday) + '&q[starts_at][lt_eq]=' + fmt(sunday) + '&per_page=100';
 
     // Try individual_appointments endpoint (Cliniko's standard appointments)
     var data = await clinikoGet('individual_appointments', params);
