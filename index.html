@@ -2336,6 +2336,17 @@ async function loadGaps() {
       });
     }
 
+    // Debug — show first 3 gaps
+    var debugEl = document.getElementById('clinikoStatus');
+    if (clinikoGaps.length > 0) {
+      var sample = clinikoGaps.slice(0,3).map(function(g) {
+        return g.pracName + ' | ' + (g.bizName || 'NO_BIZ') + ' | ' + g.dayName + ' ' + g.label;
+      }).join(' || ');
+      debugEl.textContent += ' | Sample gaps: ' + sample;
+    } else {
+      debugEl.textContent += ' | NO GAPS FOUND — check daily_availabilities';
+    }
+
     // Populate dropdowns
     populateGapDropdowns();
 
@@ -4159,6 +4170,17 @@ async function loadGaps() {
           }
         });
       });
+    }
+
+    // Debug — show first 3 gaps
+    var debugEl = document.getElementById('clinikoStatus');
+    if (clinikoGaps.length > 0) {
+      var sample = clinikoGaps.slice(0,3).map(function(g) {
+        return g.pracName + ' | ' + (g.bizName || 'NO_BIZ') + ' | ' + g.dayName + ' ' + g.label;
+      }).join(' || ');
+      debugEl.textContent += ' | Sample gaps: ' + sample;
+    } else {
+      debugEl.textContent += ' | NO GAPS FOUND — check daily_availabilities';
     }
 
     // Populate dropdowns
