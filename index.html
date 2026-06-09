@@ -2213,7 +2213,7 @@ async function loadGaps() {
     var bizData = await clinikoGet('businesses');
     var bizIdToName = {};
     if (bizData && bizData.businesses) {
-      bizData.businesses.forEach(function(b) { bizIdToName[b.id] = b.name; });
+      bizData.businesses.forEach(function(b) { bizIdToName[String(b.id)] = b.name; });
     }
 
     // Step 3: Load daily availabilities for each practitioner
@@ -2224,7 +2224,7 @@ async function loadGaps() {
       var availData = await clinikoGet('practitioners/' + prac.id + '/daily_availabilities');
       if (availData && availData.daily_availabilities) {
         availData.daily_availabilities.forEach(function(da) {
-          var bizId = da.business ? da.business.links.self.split('/').pop() : '';
+          var bizId = da.business ? String(da.business.links.self.split('/').pop()) : '';
           clinikoAvailabilities.push({
             pracId: prac.id,
             pracName: pracIdToName[prac.id],
@@ -4038,7 +4038,7 @@ async function loadGaps() {
     var bizData = await clinikoGet('businesses');
     var bizIdToName = {};
     if (bizData && bizData.businesses) {
-      bizData.businesses.forEach(function(b) { bizIdToName[b.id] = b.name; });
+      bizData.businesses.forEach(function(b) { bizIdToName[String(b.id)] = b.name; });
     }
 
     // Step 3: Load daily availabilities for each practitioner
@@ -4049,7 +4049,7 @@ async function loadGaps() {
       var availData = await clinikoGet('practitioners/' + prac.id + '/daily_availabilities');
       if (availData && availData.daily_availabilities) {
         availData.daily_availabilities.forEach(function(da) {
-          var bizId = da.business ? da.business.links.self.split('/').pop() : '';
+          var bizId = da.business ? String(da.business.links.self.split('/').pop()) : '';
           clinikoAvailabilities.push({
             pracId: prac.id,
             pracName: pracIdToName[prac.id],
