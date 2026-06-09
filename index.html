@@ -1869,24 +1869,32 @@ async function loadGaps() {
     var sunday = new Date(monday);
     sunday.setDate(monday.getDate() + 6);
 
-    var fmt = function(d) { return d.toISOString().split('T')[0]; };
+    var fmt = function(d) { return d.toISOString().split('.')[0] + 'Z'; };
     var params = 'q[appointment_start][gt_eq]=' + fmt(monday) + '&q[appointment_start][lt_eq]=' + fmt(sunday) + '&per_page=100';
 
-    var data = await clinikoGet('appointments', params);
-    if (!data || !data.appointments) {
+    // Try individual_appointments endpoint (Cliniko's standard appointments)
+    var data = await clinikoGet('individual_appointments', params);
+    if (!data || !data.individual_appointments) {
+      // Fallback to appointments endpoint
+      data = await clinikoGet('appointments', params);
+    }
+    var appts = (data && data.individual_appointments) ? data.individual_appointments :
+                (data && data.appointments) ? data.appointments : null;
+
+    if (!appts) {
       statusEl.style.color = '#c0392b';
-      statusEl.textContent = '✗ Could not load appointments';
+      statusEl.textContent = '✗ Could not load appointments — check API key';
       return;
     }
 
-    var appts = data.appointments;
     statusEl.style.color = 'var(--sage)';
     statusEl.textContent = '✓ Loaded ' + appts.length + ' appointments this week. CSV upload still needed for patient history.';
 
     // Show summary by day
     var byDay = {};
     appts.forEach(function(a) {
-      var day = new Date(a.appointment_start).toLocaleDateString('en-AU', {weekday:'long'});
+      var startField = a.starts_at || a.appointment_start || '';
+      var day = startField ? new Date(startField).toLocaleDateString('en-AU', {weekday:'long'}) : 'Unknown';
       byDay[day] = (byDay[day] || 0) + 1;
     });
     var summary = Object.keys(byDay).map(function(d) { return d + ': ' + byDay[d]; }).join(' | ');
