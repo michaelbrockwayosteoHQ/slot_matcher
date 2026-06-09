@@ -1870,7 +1870,7 @@ async function loadGaps() {
     sunday.setDate(monday.getDate() + 6);
 
     var fmt = function(d) { return d.toISOString().split('.')[0] + 'Z'; };
-    var params = 'q[starts_at][gt_eq]=' + fmt(monday) + '&q[starts_at][lt_eq]=' + fmt(sunday) + '&per_page=100';
+    var params = 'q[]=' + encodeURIComponent('starts_at:>' + fmt(monday)) + '&q[]=' + encodeURIComponent('starts_at:<' + fmt(sunday)) + '&per_page=100';
 
     // Try individual_appointments endpoint (Cliniko's standard appointments)
     var data = await clinikoGet('individual_appointments', params);
@@ -1883,7 +1883,10 @@ async function loadGaps() {
 
     if (!appts) {
       statusEl.style.color = '#c0392b';
-      statusEl.textContent = '✗ Could not load appointments — check API key';
+      // Show what actually came back to help debug
+      var keys = data ? Object.keys(data).join(', ') : 'null response';
+      var errMsg = (data && data.error) ? data.error.message || JSON.stringify(data.error) : 'no error field';
+      statusEl.textContent = '✗ Keys returned: ' + keys + ' | Error: ' + errMsg;
       return;
     }
 
