@@ -2198,12 +2198,21 @@ async function loadGaps() {
     for (var pi = 0; pi < practitioners.length; pi++) {
       var prac = practitioners[pi];
       var availData = await clinikoGet('practitioners/' + prac.id + '/daily_availabilities');
-      // Debug first practitioner
+      // Debug first practitioner - write to separate div so it persists
       if (pi === 0) {
-        statusEl.textContent = 'DEBUG avail keys: ' + (availData ? Object.keys(availData).join(',') : 'null') +
-          ' | bizIdToName keys: ' + Object.keys(bizIdToName).slice(0,3).join(',') +
-          ' | sample avail: ' + (availData && availData.daily_availabilities && availData.daily_availabilities[0] ?
-            JSON.stringify(availData.daily_availabilities[0]).slice(0,150) : 'none');
+        var dbg = document.getElementById('debugOut');
+        if (!dbg) {
+          dbg = document.createElement('div');
+          dbg.id = 'debugOut';
+          dbg.style.cssText = 'margin-top:8px;padding:8px;background:#f0f0ee;border-radius:6px;font-size:11px;font-family:monospace;word-break:break-all;color:#333';
+          statusEl.parentNode.appendChild(dbg);
+        }
+        dbg.innerHTML = '<strong>DEBUG:</strong><br>' +
+          'avail keys: ' + (availData ? Object.keys(availData).join(', ') : 'null') + '<br>' +
+          'bizIdToName sample: ' + JSON.stringify(Object.keys(bizIdToName).slice(0,4)) + '<br>' +
+          'daily_avail count: ' + (availData && availData.daily_availabilities ? availData.daily_availabilities.length : 0) + '<br>' +
+          'sample record: ' + (availData && availData.daily_availabilities && availData.daily_availabilities[0] ?
+            JSON.stringify(availData.daily_availabilities[0]).slice(0,200) : 'none');
       }
       if (availData && availData.daily_availabilities) {
         availData.daily_availabilities.forEach(function(da) {
@@ -4029,12 +4038,21 @@ async function loadGaps() {
     for (var pi = 0; pi < practitioners.length; pi++) {
       var prac = practitioners[pi];
       var availData = await clinikoGet('practitioners/' + prac.id + '/daily_availabilities');
-      // Debug first practitioner
+      // Debug first practitioner - write to separate div so it persists
       if (pi === 0) {
-        statusEl.textContent = 'DEBUG avail keys: ' + (availData ? Object.keys(availData).join(',') : 'null') +
-          ' | bizIdToName keys: ' + Object.keys(bizIdToName).slice(0,3).join(',') +
-          ' | sample avail: ' + (availData && availData.daily_availabilities && availData.daily_availabilities[0] ?
-            JSON.stringify(availData.daily_availabilities[0]).slice(0,150) : 'none');
+        var dbg = document.getElementById('debugOut');
+        if (!dbg) {
+          dbg = document.createElement('div');
+          dbg.id = 'debugOut';
+          dbg.style.cssText = 'margin-top:8px;padding:8px;background:#f0f0ee;border-radius:6px;font-size:11px;font-family:monospace;word-break:break-all;color:#333';
+          statusEl.parentNode.appendChild(dbg);
+        }
+        dbg.innerHTML = '<strong>DEBUG:</strong><br>' +
+          'avail keys: ' + (availData ? Object.keys(availData).join(', ') : 'null') + '<br>' +
+          'bizIdToName sample: ' + JSON.stringify(Object.keys(bizIdToName).slice(0,4)) + '<br>' +
+          'daily_avail count: ' + (availData && availData.daily_availabilities ? availData.daily_availabilities.length : 0) + '<br>' +
+          'sample record: ' + (availData && availData.daily_availabilities && availData.daily_availabilities[0] ?
+            JSON.stringify(availData.daily_availabilities[0]).slice(0,200) : 'none');
       }
       if (availData && availData.daily_availabilities) {
         availData.daily_availabilities.forEach(function(da) {
