@@ -2185,12 +2185,22 @@ async function loadGaps() {
     var pracIdToName = {};
     practitioners.forEach(function(p) { pracIdToName[p.id] = p.first_name + ' ' + p.last_name; });
 
-    // Step 2: Load businesses FIRST so bizIdToName is ready
+    // Step 2: Load businesses and map IDs to names
     var bizData = await clinikoGet('businesses');
     var bizIdToName = {};
     if (bizData && bizData.businesses) {
-      bizData.businesses.forEach(function(b) { bizIdToName[String(b.id)] = b.name; });
+      bizData.businesses.forEach(function(b) {
+        // Try all possible name fields Cliniko might use
+        var name = b.name || b.business_name || b.display_name || b.title || '';
+        // If still empty, extract from self link
+        if (!name && b.links && b.links.self) {
+          name = 'Clinic ' + b.links.self.split('/').pop();
+        }
+        bizIdToName[String(b.id)] = name;
+      });
     }
+    // Also build from appointments already loaded — more reliable
+    // We'll get business names from the individual appointment business links later
 
     // Step 3: Load daily availabilities per business (includes bizId context)
     statusEl.textContent = 'Loading working hours per clinic...';
@@ -4014,12 +4024,22 @@ async function loadGaps() {
     var pracIdToName = {};
     practitioners.forEach(function(p) { pracIdToName[p.id] = p.first_name + ' ' + p.last_name; });
 
-    // Step 2: Load businesses FIRST so bizIdToName is ready
+    // Step 2: Load businesses and map IDs to names
     var bizData = await clinikoGet('businesses');
     var bizIdToName = {};
     if (bizData && bizData.businesses) {
-      bizData.businesses.forEach(function(b) { bizIdToName[String(b.id)] = b.name; });
+      bizData.businesses.forEach(function(b) {
+        // Try all possible name fields Cliniko might use
+        var name = b.name || b.business_name || b.display_name || b.title || '';
+        // If still empty, extract from self link
+        if (!name && b.links && b.links.self) {
+          name = 'Clinic ' + b.links.self.split('/').pop();
+        }
+        bizIdToName[String(b.id)] = name;
+      });
     }
+    // Also build from appointments already loaded — more reliable
+    // We'll get business names from the individual appointment business links later
 
     // Step 3: Load daily availabilities per business (includes bizId context)
     statusEl.textContent = 'Loading working hours per clinic...';
