@@ -2349,16 +2349,13 @@ function populateGapDropdowns() {
   // Get unique days that have gaps
   var days = [];
   clinikoGaps.forEach(function(g) { if (days.indexOf(g.dayName) === -1) days.push(g.dayName); });
-
   var dayOrder = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
   days.sort(function(a,b) { return dayOrder.indexOf(a) - dayOrder.indexOf(b); });
 
+  // Populate day dropdown
   var daySelect = document.getElementById('slotDay');
   if (!daySelect) return;
-
-  // Save current selection
   var currentDay = daySelect.value;
-
   daySelect.innerHTML = '<option value="">Select day...</option>';
   days.forEach(function(d) {
     var opt = document.createElement('option');
@@ -2366,25 +2363,62 @@ function populateGapDropdowns() {
     if (d === currentDay) opt.selected = true;
     daySelect.appendChild(opt);
   });
-
-  // Update time block dropdown when day changes
   daySelect.onchange = function() {
     updateTimeBlocksForDay(daySelect.value);
+    updatePractitionersForDay(daySelect.value);
     checkReady();
   };
-
   if (days.length === 1) {
     daySelect.value = days[0];
     updateTimeBlocksForDay(days[0]);
+    updatePractitionersForDay(days[0]);
   }
+
+  // Populate practitioner dropdown from all practitioners with gaps
+  populatePractitionerDropdown('');
+}
+
+function populatePractitionerDropdown(dayName) {
+  var pracSelect = document.getElementById('slotPrac');
+  if (!pracSelect) return;
+  var current = pracSelect.value;
+  pracSelect.onchange = function() {
+    var day = document.getElementById('slotDay') ? document.getElementById('slotDay').value : '';
+    if (day) updateTimeBlocksForDay(day);
+    checkReady();
+  };
+
+  // Get practitioners who have gaps on this day (or all days if no day selected)
+  var pracs = [];
+  clinikoGaps.forEach(function(g) {
+    if (!dayName || g.dayName === dayName) {
+      if (pracs.indexOf(g.pracName) === -1) pracs.push(g.pracName);
+    }
+  });
+  pracs.sort();
+
+  pracSelect.innerHTML = '<option value="">All practitioners</option>';
+  pracs.forEach(function(name) {
+    var opt = document.createElement('option');
+    opt.value = name; opt.textContent = name;
+    if (name === current) opt.selected = true;
+    pracSelect.appendChild(opt);
+  });
+}
+
+function updatePractitionersForDay(dayName) {
+  populatePractitionerDropdown(dayName);
 }
 
 function updateTimeBlocksForDay(dayName) {
   var blockSelect = document.getElementById('slotBlock');
   if (!blockSelect || !dayName) return;
 
-  // Get gaps for this day
-  var dayGaps = clinikoGaps.filter(function(g) { return g.dayName === dayName; });
+  // Get gaps for this day — filter by selected practitioner if any
+  var selectedPrac = document.getElementById('slotPrac') ? document.getElementById('slotPrac').value : '';
+  var dayGaps = clinikoGaps.filter(function(g) {
+    return g.dayName === dayName && (!selectedPrac || g.pracName === selectedPrac);
+  });
 
   // Get unique time labels
   var times = [];
