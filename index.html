@@ -20,7 +20,7 @@ main{max-width:860px;margin:0 auto;padding:2.5rem 2rem 4rem}
 .step{margin-bottom:2rem}
 .step-label{font-size:11px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--sage);margin-bottom:.4rem}
 .step h2{font-family:'DM Serif Display',serif;font-size:1.2rem;font-weight:400;margin-bottom:.9rem}
-.upload-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+.upload-grid{display:grid;grid-template-columns:1fr;gap:1rem;max-width:440px}
 .upload-wrap{position:relative;cursor:pointer}
 .upload-zone{border:1.5px dashed var(--sage-mid);border-radius:var(--radius);padding:1.75rem 1.5rem;text-align:center;background:white;transition:background .15s,border-color .15s;pointer-events:none}
 .upload-wrap:hover .upload-zone{background:var(--sage-light);border-color:var(--sage)}
@@ -107,7 +107,7 @@ main{max-width:860px;margin:0 auto;padding:2.5rem 2rem 4rem}
 <body>
 <header>
   <h1>Volumiser</h1>
-  <span>Re-engage the right patients for open appointment slots</span>
+  <span>Smart appointment re-engagement — no AI required</span>
 </header>
 <main>
   <div class="step">
@@ -286,45 +286,9 @@ License: MIT
 <script>
 var PROXY = 'https://osteo-proxy.michaelbrockway.workers.dev';
 
-async function testAPI() {
-  var apiKey = (document.getElementById('apiKey').value || '').trim();
-  var statusEl = document.getElementById('apiStatus');
-  if (!apiKey) { statusEl.style.color='#c0392b'; statusEl.textContent = '✗ No API key entered'; return; }
-  statusEl.style.color = 'var(--ink-light)';
-  statusEl.textContent = 'Testing...';
-  try {
-    var resp = await fetch('https://osteo-proxy.michaelbrockway.workers.dev?target=anthropic', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 20,
-        messages: [{role:'user', content:'Say OK'}]
-      })
-    });
-    var data = await resp.json();
-    if (data.content && data.content[0] && data.content[0].text) {
-      statusEl.style.color = 'var(--sage)';
-      statusEl.textContent = '✓ API key working';
-    } else if (data.error) {
-      statusEl.style.color = '#c0392b';
-      statusEl.textContent = '✗ Error: ' + data.error.message;
-    } else {
-      statusEl.style.color = '#c0392b';
-      statusEl.textContent = '✗ Unexpected response: ' + JSON.stringify(data).slice(0,100);
-    }
-  } catch(e) {
-    statusEl.style.color = '#c0392b';
-    statusEl.textContent = '✗ ' + e.message;
-  }
-}
-
 // ── State ────────────────────────────────────────────────────────────────────
 var attendeesRows = [], notesRows = [], practitioners = [];
-var attendeesReady = false, notesReady = false;
+var attendeesReady = false; // kept for CSV fallback
 var currentPatients = [], currentDay = '', currentBlock = '', currentPrac = '';
 
 var BOOKING_LINKS = {
@@ -521,7 +485,7 @@ function extractComplaint(text) {
 }
 
 function getComplaint(patientId) {
-  if (!notesReady || !notesRows.length) return null;
+  if (!false || !notesRows.length) return null;
   var pid = String(patientId).trim();
   var pnotes = notesRows.filter(function(r) { return String(r['Patient ID'] || '').trim() === pid && r['Text']; });
   pnotes.sort(function(a, b) { return (b['CreatedAt'] || '').localeCompare(a['CreatedAt'] || ''); });
@@ -941,18 +905,17 @@ function renderResults() {
   var pw = document.getElementById('progressWrap');
   var pf = document.getElementById('progressFill');
   var pl = document.getElementById('progressLabel');
-  pw.style.display = 'block';
-  pf.style.width = '0%';
-  pl.textContent = 'Writing emails... 0 of ' + total;
+  pw.style.display = 'none';
 
+  // Instant render - no AI in core version
   currentPatients.forEach(function(p, i) {
-    generateMsg(p, currentDay, currentBlock, currentPrac).then(function(result) {
-      setMsg(i, result.email, result.sms, result.isAI);
-      done++;
-      pf.style.width = Math.round(done/total*100) + '%';
-      pl.textContent = done < total ? 'Writing emails... ' + done + ' of ' + total : '&#x2713; All ' + total + ' emails ready';
-      if (done >= total) setTimeout(function() { pw.style.display = 'none'; }, 2500);
-    });
+    var biz2 = document.getElementById('slotBiz') ? document.getElementById('slotBiz').value : '';
+    var tid = 'warm';
+    var sel = document.getElementById('tmpl-' + i);
+    if (sel) tid = sel.value;
+    var tmpl = TEMPLATES.find(function(t) { return t.id === tid; }) || TEMPLATES[0];
+    var r = applyTemplate(tmpl, p, currentDay, currentBlock, currentPrac, biz2);
+    setMsg(i, r.email, r.sms, false);
   });
 }
 
@@ -992,20 +955,7 @@ function changeTemplate(i) {
   var p = currentPatients[i];
   var biz = document.getElementById('slotBiz') ? document.getElementById('slotBiz').value : '';
   var result = applyTemplate(template, p, currentDay, currentBlock, currentPrac, biz);
-  // If AI template selected and we have a complaint, use AI
-  if (templateId === 'clinical' && p.complaint) {
-    var gen = document.getElementById('gen-' + i);
-    var ep = document.getElementById('epane-' + i);
-    var acts = document.getElementById('acts-' + i);
-    if (gen) gen.style.display = 'flex';
-    if (ep) ep.style.display = 'none';
-    if (acts) acts.style.display = 'none';
-    generateMsg(p, currentDay, currentBlock, currentPrac).then(function(r) {
-      setMsg(i, r.email, r.sms, r.isAI);
-    });
-  } else {
-    setMsg(i, result.email, result.sms, false);
-  }
+  setMsg(i, result.email, result.sms, false);
 }
 
 function setMsg(i, email, sms, isAI) {
@@ -1059,12 +1009,806 @@ function regenMsg(i) {
   btn.disabled = true;
   ep.style.display = 'none';
   acts.style.display = 'none';
-  gen.style.display = 'flex';
   var p = currentPatients[i];
-  generateMsg(p, currentDay, currentBlock, currentPrac).then(function(result) {
-    setMsg(i, result.email, result.sms, result.isAI);
-    btn.disabled = false;
+  var biz3 = document.getElementById('slotBiz') ? document.getElementById('slotBiz').value : '';
+  var tid3 = 'warm';
+  var sel3 = document.getElementById('tmpl-' + i);
+  if (sel3) tid3 = sel3.value;
+  var tmpl3 = TEMPLATES.find(function(t) { return t.id === tid3; }) || TEMPLATES[0];
+  var r3 = applyTemplate(tmpl3, p, currentDay, currentBlock, currentPrac, biz3);
+  setMsg(i, r3.email, r3.sms, false);
+  btn.disabled = false;
+}
+
+// ── AI generation ─────────────────────────────────────────────────────────────
+function getSlotLabel(blockKey) {
+  if (!blockKey) return 'morning';
+  if (blockKey.indexOf('exact-') === 0) {
+    var tp = blockKey.replace('exact-','').split(':');
+    var h = parseInt(tp[0]); var m = tp[1];
+    var ap = h >= 12 ? 'pm' : 'am'; var h12 = h % 12 || 12;
+    return h12 + ':' + m + ap;
+  }
+  return BLOCKS[blockKey] ? BLOCKS[blockKey].label : blockKey;
+}
+
+function isExactSlot(blockKey) {
+  return blockKey && blockKey.indexOf('exact-') === 0;
+}
+
+function buildSMS(firstName, pracFirst, day, blockKey, complaint) {
+  var slotLabel = getSlotLabel(blockKey);
+  var isExact = isExactSlot(blockKey);
+  var timeRef = isExact
+    ? day + ' ' + slotLabel + ' — a time ' + pracFirst + ' knows works well for you'
+    : day + ' ' + slotLabel + ' that suits your usual schedule';
+  var issue = complaint ? ' We wanted to check in on how you are going.' : '';
+  var bookingLink = getBookingLink(prac, document.getElementById('slotBiz') ? document.getElementById('slotBiz').value : '');
+  return 'Hi ' + firstName + ', it\'s the team at {business}. We have a ' + timeRef + ' available with ' + pracFirst + ' this week.' + issue + ' Book here: ' + bookingLink;
+}
+
+function fallbackEmail(firstName, pracFirst, day, blockKey, complaint, bookingLink) {
+  bookingLink = bookingLink || '[BOOKING LINK]';
+  var slotLabel = getSlotLabel(blockKey);
+  var isExact = isExactSlot(blockKey);
+  var timeRef = isExact
+    ? day + ' at ' + slotLabel + ' — ' + pracFirst + ' knows that time works well for you'
+    : day + ' ' + slotLabel + ' that suits your usual schedule';
+  if (complaint) {
+    return 'Hi ' + firstName + ',\n\nIt\'s been a while since your last visit, and we wanted to check in. We have a ' + timeRef + ' available with ' + pracFirst + ' this week.\n\nIf you\'ve been meaning to come back in, now\'s a great time. Simply reply to this email or book online: ' + bookingLink + '\n\nLooking forward to seeing you soon.';
+  }
+  return 'Hi ' + firstName + ',\n\nWe hope you\'re going well! We have a ' + timeRef + ' available with ' + pracFirst + ' this week and thought of you.\n\nIf you\'ve been meaning to come back in, now\'s a great time. Simply reply to this email or book online: ' + bookingLink + '\n\nLooking forward to seeing you soon.';
+}
+
+async function generateMsg(patient, day, blockKey, prac) {
+  var biz = document.getElementById('slotBiz') ? document.getElementById('slotBiz').value : '';
+  var selectedTemplateId = 'warm';
+  for (var ti = 0; ti < currentPatients.length; ti++) {
+    if (currentPatients[ti] === patient) {
+      var el = document.getElementById('tmpl-' + ti);
+      if (el) selectedTemplateId = el.value;
+      break;
+    }
+  }
+  var tmpl = TEMPLATES.find(function(t) { return t.id === selectedTemplateId; }) || TEMPLATES[0];
+  var r = applyTemplate(tmpl, patient, day, blockKey, prac, biz);
+  return { email: r.email, sms: r.sms, isAI: false };
+}
+
+
+
+// ── State ────────────────────────────────────────────────────────────────────
+var attendeesRows = [], notesRows = [], practitioners = [];
+var attendeesReady = false; // kept for CSV fallback
+var currentPatients = [], currentDay = '', currentBlock = '', currentPrac = '';
+
+var BOOKING_LINKS = {
+  'Shannon Walsh': {
+    'Tullamarine Osteopathy': 'https://bit.ly/3Px7ptF'
+  },
+  'Matt Spencer': {
+    'Greenvale Osteopathy': 'https://bit.ly/4venUcZ',
+    'Tullamarine Osteopathy': 'https://bit.ly/4fYbhyi'
+  },
+  'Shehan Kariyakaranage': {
+    'Tullamarine Osteopathy': 'https://bit.ly/4aj2vY4',
+    'Greenvale Osteopathy': 'https://bit.ly/4uD6EhH'
+  },
+  'Laura Addinsall': {
+    'Greenvale Osteopathy': 'https://bit.ly/4dImWQB',
+    'Tullamarine Osteopathy': 'https://bit.ly/4u5gKqI'
+  }
+};
+
+function getBookingLink(prac, biz) {
+  if (prac && biz && BOOKING_LINKS[prac] && BOOKING_LINKS[prac][biz]) {
+    return BOOKING_LINKS[prac][biz];
+  }
+  return '[BOOKING LINK]';
+}
+
+
+var TEMPLATES = [
+  {
+    id: 'warm',
+    name: 'Warm check-in',
+    isDefault: true,
+    shared: true,
+    email: 'Hi {firstName},\n\nHope you\'re going well! We have a {day} {timeSlot} spot available with {practitioner} this week — {practitioner} knows that time works well for you.\n\nIf you\'ve been meaning to come back in, now\'s a great time. Simply reply or book online: {bookingLink}\n\nLooking forward to seeing you soon.',
+    sms: 'Hi {firstName}, it\'s the team at Tulla Osteo / Greenvale Osteo. We have a {day} {timeSlot} spot with {practitioner} this week — {practitioner} knows that time works well for you. Book here: {bookingLink}'
+  },
+  {
+    id: 'urgent',
+    name: 'Urgency — 1 spot left',
+    isDefault: false,
+    shared: true,
+    email: 'Hi {firstName},\n\nJust a quick note — we have one {day} {timeSlot} spot left with {practitioner} this week and thought of you straight away.\n\nIf you\'d like it, grab it before it goes: {bookingLink}\n\nSpeak soon.',
+    sms: 'Hi {firstName}, one {day} {timeSlot} spot just opened with {practitioner} this week — thought of you. Grab it here: {bookingLink}'
+  },
+  {
+    id: 'brief',
+    name: 'Short and direct',
+    isDefault: false,
+    shared: true,
+    email: 'Hi {firstName},\n\nWe have a {day} {timeSlot} appointment available with {practitioner} this week that suits your usual schedule.\n\nBook here: {bookingLink}\n\nThe team',
+    sms: 'Hi {firstName} — {day} {timeSlot} spot available with {practitioner} this week. Book: {bookingLink}'
+  },
+  {
+    id: 'reintro',
+    name: 'Re-introduction (lapsed 12m+)',
+    isDefault: false,
+    shared: true,
+    email: 'Hi {firstName},\n\nIt\'s been a while since we last saw you and we wanted to reach out. We have a {day} {timeSlot} spot available with {practitioner} this week.\n\nIf you\'ve been dealing with anything that needs attention, or just want to check in and maintain your health, we\'d love to see you again.\n\nBook online here: {bookingLink}\n\nWarm regards,\nThe team',
+    sms: 'Hi {firstName}, it\'s been a while! We have a {day} {timeSlot} spot with {practitioner} this week if you\'d like to come back in. Book: {bookingLink}'
+  },
+  {
+    id: 'premium_weekend',
+    name: 'Premium spots — weekend send',
+    isDefault: false,
+    shared: true,
+    email: 'Hi {firstName},\n\nIt\'s the team at {business}. We have a couple of premium {timeSlot} spots left this week with {practitioner} — {practitioner} knows that time works well for you.\n\nIf you need an appointment, grab one here: {bookingLink}\n\nOtherwise hope you\'re having a great weekend!\n\nThe team at {business}',
+    sms: 'Hi {firstName}, it\'s the team at {business}. We have a couple of premium {timeSlot} spots left this week with {practitioner} — {practitioner} knows that time works well for you. If you need an appt, grab one here: {bookingLink} — otherwise hope you\'re having a great weekend!'
+  },
+  {
+    id: 'clinical',
+    name: 'Clinical hook (AI enhanced)',
+    isDefault: false,
+    shared: true,
+    email: 'Hi {firstName},\n\nWe have a {day} {timeSlot} spot available with {practitioner} this week and thought of you. It\'s been a while since your last visit and it\'s worth checking in to make sure things are tracking well.\n\nBook here: {bookingLink}\n\nLooking forward to seeing you.',
+    sms: 'Hi {firstName}, {practitioner} has a {day} {timeSlot} spot this week and wanted to check in on how you\'re going. Book: {bookingLink}'
+  }
+];
+
+function applyTemplate(template, patient, day, blockKey, prac, biz) {
+  var firstName = patient.name.split(' ')[0];
+  var pracFirst = prac ? prac.split(' ')[0] : 'your practitioner';
+  var slotLabel = getSlotLabel(blockKey);
+  var isExact = isExactSlot(blockKey);
+  var timeSlot = isExact ? day + ' at ' + slotLabel : day + ' ' + slotLabel;
+  var bookingLink = getBookingLink(prac, biz);
+
+  var bizName = biz || 'our clinic';
+
+  function fill(text) {
+    return text
+      .replace(/{firstName}/g, firstName)
+      .replace(/{practitioner}/g, pracFirst)
+      .replace(/{day}/g, day)
+      .replace(/{timeSlot}/g, timeSlot)
+      .replace(/{bookingLink}/g, bookingLink)
+      .replace(/{business}/g, bizName);
+  }
+  return { email: fill(template.email), sms: fill(template.sms) };
+}
+
+var BLOCKS = {
+  morning:   {label:'morning',   start:6,  end:12},
+  midday:    {label:'midday',    start:12, end:15},
+  afternoon: {label:'afternoon', start:15, end:18},
+  evening:   {label:'evening',   start:18, end:21}
+};
+
+// ── File upload ───────────────────────────────────────────────────────────────
+
+
+function readCSV(file, zoneId, textId, subId, label, onLoad) {
+  var zone = document.getElementById(zoneId);
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var text = e.target.result;
+    var rows;
+    if (typeof Papa !== 'undefined') {
+      var result = Papa.parse(text, {header: true, skipEmptyLines: true});
+      rows = result.data;
+    } else {
+      rows = fallbackCSV(text);
+    }
+    zone.classList.add('loaded');
+    document.getElementById(textId).innerHTML = '<span class="loaded-text">&#x2713; ' + label + ' loaded</span>';
+    document.getElementById(subId).textContent = rows.length.toLocaleString() + ' records';
+    onLoad(rows);
+  };
+  reader.onerror = function() { alert('Could not read file. Please try again.'); };
+  reader.readAsText(file);
+}
+
+function fallbackCSV(text) {
+  var lines = text.split('\r\n');
+  if (lines.length < 2) lines = text.split('\n');
+  var headers = splitLine(lines[0]).map(function(h) { return h.replace(/^\uFEFF/, '').trim(); });
+  var rows = [];
+  for (var i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    var vals = splitLine(lines[i]);
+    var row = {};
+    headers.forEach(function(h, j) { row[h] = vals[j] || ''; });
+    rows.push(row);
+  }
+  return rows;
+}
+
+function splitLine(line) {
+  var result = [], cur = '', inQ = false;
+  for (var i = 0; i < line.length; i++) {
+    var c = line[i];
+    if (c === '"') { inQ = !inQ; }
+    else if (c === ',' && !inQ) { result.push(cur.trim()); cur = ''; }
+    else { cur += c; }
+  }
+  result.push(cur.trim());
+  return result;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function checkReady() {
+  var ok = attendeesReady && document.getElementById('slotDay').value && document.getElementById('slotBlock').value && document.getElementById('slotBiz').value;
+  document.getElementById('findBtn').disabled = !ok;
+}
+
+function stripHtml(t) {
+  return t.replace(/<[^>]+>/g, ' ').replace(/\u200b/g, '').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim();
+}
+
+function extractComplaint(text) {
+  if (!text || typeof text !== 'string') return null;
+  // Try each label variant separately to avoid complex regex
+  var labels = [
+    'Presenting Complaint',
+    'Patient Progress/Complaint',
+    'Patient Progress/complaint',
+    'Patient Progress report/complaint',
+    'Reason for visit'
+  ];
+  var m = null;
+  for (var li = 0; li < labels.length; li++) {
+    var tag = '[Question: ' + labels[li] + ']';
+    var idx = text.indexOf(tag);
+    if (idx === -1) continue;
+    var start = idx + tag.length;
+    var nextQ = text.indexOf('[Question:', start);
+    var chunk = nextQ === -1 ? text.slice(start) : text.slice(start, nextQ);
+    m = chunk;
+    break;
+  }
+  if (!m) return null;
+  var raw = stripHtml(m).trim().replace(/^\*\*.*?\*\*\s*/g,'').replace(/^PTS\s*[-\u2013]\s*/i,'').trim();
+  return raw.length >= 8 ? raw.slice(0, 400) : null;
+}
+
+function getComplaint(patientId) {
+  if (!false || !notesRows.length) return null;
+  var pid = String(patientId).trim();
+  var pnotes = notesRows.filter(function(r) { return String(r['Patient ID'] || '').trim() === pid && r['Text']; });
+  pnotes.sort(function(a, b) { return (b['CreatedAt'] || '').localeCompare(a['CreatedAt'] || ''); });
+  for (var i = 0; i < pnotes.length; i++) {
+    var c = extractComplaint(pnotes[i]['Text']);
+    if (c) return c;
+  }
+  return null;
+}
+
+function parseSlotDate(row) {
+  var s = row['Start Time'];
+  if (!s) return null;
+  var m = s.match(/^(\d{4}-\d{2}-\d{2}) (\d{2}):(\d{2})/);
+  if (!m) return null;
+  var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var d = new Date(m[1]);
+  return {day: days[d.getUTCDay()], hour: parseInt(m[2]), minute: parseInt(m[3])};
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return 'Unknown';
+  var d = new Date(dateStr);
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return d.getUTCDate() + ' ' + months[d.getUTCMonth()] + ' ' + d.getUTCFullYear();
+}
+
+function weeksAgo(dateStr) {
+  var d = new Date(dateStr);
+  return Math.floor((Date.now() - d.getTime()) / (1000*60*60*24*7));
+}
+
+function recencyDot(dateStr) {
+  var w = weeksAgo(dateStr);
+  if (w <= 13) return 'dot-hot';
+  if (w <= 52) return 'dot-warm';
+  return 'dot-cold';
+}
+
+function recencyLabel(dateStr) {
+  var w = weeksAgo(dateStr);
+  if (w <= 4) return 'Within last month';
+  if (w <= 13) return '~' + w + ' weeks ago';
+  if (w <= 52) return '~' + Math.round(w/4) + ' months ago';
+  return '~' + Math.round(w/52) + ' year' + (Math.round(w/52) > 1 ? 's' : '') + ' ago';
+}
+
+function initials(name) {
+  return name.split(' ').map(function(n) { return n[0]; }).join('').toUpperCase().slice(0,2);
+}
+
+function formatBlock(b) {
+  var map = {morning:'morning',midday:'midday',afternoon:'afternoon',evening:'evening'};
+  return map[b] || b;
+}
+
+// ── Find patients ─────────────────────────────────────────────────────────────
+async function findPatients() {
+  var day = document.getElementById('slotDay').value;
+  var blockKey = document.getElementById('slotBlock').value;
+  var prac = document.getElementById('slotPrac').value;
+  var selectedBiz = document.getElementById('slotBiz').value;
+  if (!day || !blockKey || !selectedBiz) { alert('Please select a day, time block and clinic.'); return; }
+  
+  // If we have loaded API data, use it. Otherwise fall back to CSV if loaded.
+  if (clinikoAppointments.length > 0) {
+    await findPatientsFromAPI(day, blockKey, prac, selectedBiz);
+    return;
+  }
+  
+  // CSV fallback
+  if (!attendeesReady) { alert('Please load this week\'s gaps first or upload a CSV.'); return; }
+
+  var isExact = blockKey.indexOf('exact-') === 0;
+  var block = isExact ? null : BLOCKS[blockKey];
+  var exactMins = 0;
+  var exactLabel = '';
+  if (isExact) {
+    var timePart = blockKey.replace('exact-', '');
+    var tp = timePart.split(':');
+    exactMins = parseInt(tp[0]) * 60 + parseInt(tp[1]);
+    var h = parseInt(tp[0]); var m = tp[1];
+    var ap = h >= 12 ? 'pm' : 'am'; var h12 = h % 12 || 12;
+    exactLabel = h12 + ':' + m + ap;
+  }
+  currentDay = day; currentBlock = blockKey; currentPrac = prac;
+
+  var notCancelled = attendeesRows.filter(function(r) {
+    return !r['Cancellation Time'] || !r['Cancellation Time'].trim();
   });
+
+  var matched = notCancelled.filter(function(r) {
+    var p = parseSlotDate(r);
+    if (!p) return false;
+    if (p.day !== day) return false;
+    if (isExact) {
+      var rowMins = p.hour * 60 + p.minute;
+      if (Math.abs(rowMins - exactMins) > 20) return false;
+    } else {
+      if (p.hour < block.start || p.hour >= block.end) return false;
+    }
+    // No practitioner filter here — match slot time regardless of who they saw
+    // Practitioner filter is applied at patient level based on last visit
+    return true;
+  });
+
+  // Build set of patients who already have a future appointment
+  var today = new Date().toISOString().slice(0, 10);
+  var hasUpcoming = {};
+  attendeesRows.forEach(function(r) {
+    if (r['Cancellation Time'] && r['Cancellation Time'].trim()) return;
+    var id = String(r['Patient ID'] || '').trim();
+    var s = r['Start Time'];
+    if (!id || !s) return;
+    if (s.slice(0, 10) > today) hasUpcoming[id] = true;
+  });
+
+  // Build overall last-visit lookup including last practitioner and last business
+  var lastVisitLookup = {};
+  var lastPracLookup = {};
+  var lastBizLookup = {};
+  attendeesRows.forEach(function(r) {
+    if (r['Cancellation Time'] && r['Cancellation Time'].trim()) return;
+    var id = String(r['Patient ID'] || '').trim();
+    var s = r['Start Time'];
+    if (!id || !s) return;
+    var d = s.slice(0, 10);
+    if (!lastVisitLookup[id] || d > lastVisitLookup[id]) {
+      lastVisitLookup[id] = d;
+      lastPracLookup[id] = r['Practitioner'] || '';
+      lastBizLookup[id] = r['Business'] || '';
+    }
+  });
+
+  var byPatient = {};
+  matched.forEach(function(r) {
+    var id = String(r['Patient ID'] || '').trim();
+    var name = r['Patient'];
+    var s = r['Start Time'];
+    if (!id || !name || !s) return;
+    var dateStr = s.slice(0, 10);
+    if (!byPatient[id]) byPatient[id] = {id:id, name:name, email:r['Patient Email']||'', dates:[]};
+    byPatient[id].dates.push(dateStr);
+  });
+
+  currentPatients = Object.keys(byPatient).filter(function(id) {
+    if (hasUpcoming[id]) return false;
+    if (byPatient[id].dates.length < 2) return false;
+    // Must have last visited same business as selected clinic
+    if (lastBizLookup[id] !== selectedBiz) return false;
+    // Must have last visited same practitioner if one selected
+    if (prac && lastPracLookup[id] !== prac) return false;
+    return true;
+  }).map(function(id) {
+    var p = byPatient[id];
+    p.dates.sort(function(a,b) { return b.slice(0,10).localeCompare(a.slice(0,10)); });
+    p.lastSlotVisit = p.dates[0];
+    p.lastVisit = lastVisitLookup[id] || p.dates[0];
+    p.lastPrac = lastPracLookup[id] || '';
+    p.lastBiz = lastBizLookup[id] || '';
+    p.visitCount = p.dates.length;
+    p.complaint = getComplaint(id);
+    return p;
+  });
+
+  currentPatients.sort(function(a,b) {
+    var wa = weeksAgo(a.lastVisit), wb = weeksAgo(b.lastVisit);
+    return wa !== wb ? wa - wb : b.visitCount - a.visitCount;
+  });
+
+  renderResults();
+}
+
+// ── API-based patient matching ────────────────────────────────────────────────
+async function findPatientsFromAPI(day, blockKey, prac, selectedBiz) {
+  currentDay = day; currentBlock = blockKey; currentPrac = prac;
+
+  var statusEl = document.getElementById('clinikoStatus');
+  statusEl.style.color = 'var(--ink-light)';
+  statusEl.textContent = 'Finding matched patients...';
+
+  var isExact = blockKey.indexOf('exact-') === 0;
+  var block = isExact ? null : BLOCKS[blockKey];
+  var exactMins = 0;
+  if (isExact) {
+    var tp = blockKey.replace('exact-','').split(':');
+    exactMins = parseInt(tp[0]) * 60 + parseInt(tp[1]);
+  }
+
+  try {
+    // Get date range — look back 2 years for history
+    var today = new Date();
+    var twoYearsAgo = new Date(today);
+    twoYearsAgo.setFullYear(today.getFullYear() - 2);
+    var fmt = function(d) { return d.toISOString().split('.')[0] + 'Z'; };
+
+    // Build day-of-week filter — get appointments on matching day
+    var dayNums = {Monday:1,Tuesday:2,Wednesday:3,Thursday:4,Friday:5,Saturday:6,Sunday:0};
+    var targetDayNum = dayNums[day];
+
+    statusEl.textContent = 'Loading appointment history (this may take a moment)...';
+
+    // Load historical appointments in batches
+    var allHistory = [];
+    var page = 1;
+    var maxPages = 20; // cap at ~2000 records to avoid timeout
+    while (page <= maxPages) {
+      var params = 'q[]=' + encodeURIComponent('starts_at:>' + fmt(twoYearsAgo)) +
+                   '&q[]=' + encodeURIComponent('starts_at:<' + fmt(today)) +
+                   '&per_page=100&page=' + page;
+      var data = await clinikoGet('individual_appointments', params);
+      if (!data || !data.individual_appointments || data.individual_appointments.length === 0) break;
+      allHistory = allHistory.concat(data.individual_appointments);
+      if (allHistory.length >= Math.min(data.total_entries, 2000)) break;
+      page++;
+    }
+
+    statusEl.textContent = 'Analysing ' + allHistory.length + ' appointments...';
+
+    // Also get all patients in history to get names/emails
+    var patientIds = new Set();
+    allHistory.forEach(function(a) {
+      if (a.patient) patientIds.add(a.patient.links.self.split('/').pop());
+    });
+
+    // Build last visit lookup from history
+    var lastVisitLookup = {};
+    var lastPracLookup = {};
+    var lastBizLookup = {};
+    var hasUpcoming = {};
+
+    // Check upcoming from this week's loaded appointments
+    var todayStr = today.toISOString().slice(0,10);
+    clinikoAppointments.forEach(function(a) {
+      if (a.cancelled_at || a.deleted_at) return;
+      var pid = a.patient ? a.patient.links.self.split('/').pop() : null;
+      if (!pid) return;
+      var startStr = (a.starts_at || '').slice(0,10);
+      if (startStr >= todayStr) hasUpcoming[pid] = true;
+    });
+
+    // Build history lookups
+    allHistory.forEach(function(a) {
+      if (a.cancelled_at || a.deleted_at) return;
+      var pid = a.patient ? a.patient.links.self.split('/').pop() : null;
+      if (!pid) return;
+      var startStr = (a.starts_at || '').slice(0,10);
+      if (!lastVisitLookup[pid] || startStr > lastVisitLookup[pid]) {
+        lastVisitLookup[pid] = startStr;
+        lastPracLookup[pid] = a.practitioner ? a.practitioner.links.self.split('/').pop() : '';
+        lastBizLookup[pid] = a.business ? a.business.links.self.split('/').pop() : '';
+      }
+    });
+
+    // Match appointments to selected slot
+    var slotMatches = allHistory.filter(function(a) {
+      if (a.cancelled_at || a.deleted_at) return false;
+      var start = new Date(a.starts_at);
+      if (start.getDay() !== targetDayNum) return false;
+      var mins = start.getHours() * 60 + start.getMinutes();
+      if (isExact) {
+        return Math.abs(mins - exactMins) <= 20;
+      } else {
+        return mins >= block.start * 60 && mins < block.end * 60;
+      }
+    });
+
+    // Group by patient
+    var byPatient = {};
+    slotMatches.forEach(function(a) {
+      var pid = a.patient ? a.patient.links.self.split('/').pop() : null;
+      if (!pid) return;
+      var patientName = a.patient_name || ('Patient ' + pid);
+      var dateStr = (a.starts_at || '').slice(0,10);
+      if (!byPatient[pid]) byPatient[pid] = { id: pid, name: patientName, email: '', dates: [], pracIds: [] };
+      byPatient[pid].dates.push(dateStr);
+    });
+
+    // Get business IDs to filter by clinic
+    var bizData = await clinikoGet('businesses');
+    var bizIdMap = {};
+    if (bizData && bizData.businesses) {
+      bizData.businesses.forEach(function(b) {
+        bizIdMap[b.id] = b.name;
+      });
+    }
+
+    // Map lastBiz IDs to names
+    var lastBizNameLookup = {};
+    Object.keys(lastBizLookup).forEach(function(pid) {
+      var bizId = lastBizLookup[pid];
+      lastBizNameLookup[pid] = bizIdMap[bizId] || '';
+    });
+
+    // Map lastPrac IDs to names
+    var pracData = await clinikoGet('practitioners');
+    var pracIdMap = {};
+    if (pracData && pracData.practitioners) {
+      pracData.practitioners.forEach(function(p) {
+        pracIdMap[p.id] = p.first_name + ' ' + p.last_name;
+      });
+    }
+    var lastPracNameLookup = {};
+    Object.keys(lastPracLookup).forEach(function(pid) {
+      lastPracNameLookup[pid] = pracIdMap[lastPracLookup[pid]] || '';
+    });
+
+    // Filter and build currentPatients
+    var contactSuppression = 60; // days
+    var suppressBefore = new Date(today);
+    suppressBefore.setDate(suppressBefore.getDate() - contactSuppression);
+    var suppressStr = suppressBefore.toISOString().slice(0,10);
+
+    currentPatients = Object.keys(byPatient).filter(function(pid) {
+      var p = byPatient[pid];
+      if (hasUpcoming[pid]) return false;
+      if (p.dates.length < 2) return false;
+      // Clinic filter — last visit must be at selected clinic
+      if (selectedBiz && lastBizNameLookup[pid] !== selectedBiz) return false;
+      // Practitioner filter
+      if (prac && lastPracNameLookup[pid] !== prac) return false;
+      return true;
+    }).map(function(pid) {
+      var p = byPatient[pid];
+      p.dates.sort(function(a,b) { return b.localeCompare(a); });
+      p.lastSlotVisit = p.dates[0];
+      p.lastVisit = lastVisitLookup[pid] || p.dates[0];
+      p.lastPrac = lastPracNameLookup[pid] || '';
+      p.lastBiz = lastBizNameLookup[pid] || '';
+      p.visitCount = p.dates.length;
+      p.complaint = '';
+      return p;
+    });
+
+    currentPatients.sort(function(a,b) {
+      var wa = weeksAgo(a.lastVisit), wb = weeksAgo(b.lastVisit);
+      return wa !== wb ? wa - wb : b.visitCount - a.visitCount;
+    });
+
+    statusEl.style.color = 'var(--sage)';
+    statusEl.textContent = '✓ ' + currentPatients.length + ' matched patients found';
+
+    renderResults();
+
+  } catch(e) {
+    statusEl.style.color = '#c0392b';
+    statusEl.textContent = '✗ ' + e.message;
+    console.error(e);
+  }
+}
+
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderResults() {
+  var section = document.getElementById('resultsSection');
+  var divider = document.getElementById('resultsDivider');
+  var list = document.getElementById('resultsList');
+  var countEl = document.getElementById('resultsCount');
+
+  section.style.display = 'block';
+  divider.style.display = 'block';
+  list.innerHTML = '';
+  countEl.textContent = currentPatients.length + ' patient' + (currentPatients.length !== 1 ? 's' : '') + ' found';
+  section.scrollIntoView({behavior:'smooth', block:'start'});
+
+  if (!currentPatients.length) {
+    list.innerHTML = '<div class="empty-state"><p>No patients found for this slot.</p><p style="margin-top:.5rem;font-size:13px">Try adjusting the day, block, or removing the practitioner filter.</p></div>';
+    return;
+  }
+
+  currentPatients.forEach(function(p, i) {
+    var shortC = p.complaint ? p.complaint.slice(0,90) + (p.complaint.length > 90 ? '...' : '') : null;
+    var card = document.createElement('div');
+    card.className = 'patient-card';
+    card.id = 'card-' + i;
+    card.innerHTML =
+      '<div class="card-header" onclick="toggleCard(' + i + ')">' +
+        '<div class="patient-info">' +
+          '<div class="avatar">' + initials(p.name) + '</div>' +
+          '<div><div class="patient-name">' + p.name + '</div>' +
+          '<div class="patient-meta">' + (p.email || 'No email on file') + '</div></div>' +
+        '</div>' +
+        '<div class="card-stats">' +
+          '<div class="stat"><div class="stat-value">' + p.visitCount + '</div><div class="stat-label">visits at slot</div></div>' +
+          '<div class="stat"><div class="stat-value" style="font-size:13px;font-weight:400;color:var(--ink-mid)">' + formatDate(p.lastVisit) + '</div><div class="stat-label">last visit</div></div>' +
+          '<span class="dot ' + recencyDot(p.lastVisit) + '"></span>' +
+          '<span class="chevron" id="chev-' + i + '">&#x203A;</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="card-body" id="body-' + i + '">' +
+        (shortC ? '<div class="complaint-pill">&#x1F4CC; ' + shortC + '</div>' : '') +
+        '<div class="template-bar">' +
+          '<span class="template-label">Template</span>' +
+          '<select class="template-select" id="tmpl-' + i + '" onchange="changeTemplate(' + i + ')">' +
+          TEMPLATES.map(function(t) { return '<option value="' + t.id + '"' + (t.isDefault ? ' selected' : '') + '>' + t.name + '</option>'; }).join('') +
+          '</select>' +
+        '</div>' +
+        '<div class="tab-row">' +
+          '<button class="tab-btn active" id="tab-email-' + i + '" onclick="switchTab(' + i + ',0)">&#x2709; Email</button>' +
+          '<button class="tab-btn" id="tab-sms-' + i + '" onclick="switchTab(' + i + ',1)">&#x1F4AC; SMS</button>' +
+        '</div>' +
+        '<div class="section-label" id="lbl-' + i + '">Draft email <span class="ai-badge" id="aibadge-' + i + '" style="display:none">AI written</span></div>' +
+        '<div class="generating" id="gen-' + i + '"><span class="spinner"></span> Writing personalised message...</div>' +
+        '<div id="epane-' + i + '" style="display:none"><div class="email-box" contenteditable="true" id="email-' + i + '"></div></div>' +
+        '<div id="spane-' + i + '" style="display:none"><div class="sms-box" contenteditable="true" id="sms-' + i + '" oninput="updateCC(' + i + ')"></div><div class="char-count" id="cc-' + i + '">0 / 160</div></div>' +
+        '<div class="card-actions" id="acts-' + i + '" style="display:none">' +
+          '<button class="btn-sm" id="copymain-' + i + '" onclick="copyMain(' + i + ',this)">Copy email</button>' +
+          (p.email ? '<button class="btn-sm" data-email="' + p.email + '" onclick="copyAddr(this)">Copy address</button>' : '') +
+          '<button class="btn-sm" id="regen-' + i + '" onclick="regenMsg(' + i + ')">&#x21BA; Regenerate</button>' +
+        '</div>' +
+      '</div>';
+    list.appendChild(card);
+  });
+
+  var done = 0;
+  var total = currentPatients.length;
+  var pw = document.getElementById('progressWrap');
+  var pf = document.getElementById('progressFill');
+  var pl = document.getElementById('progressLabel');
+  pw.style.display = 'none';
+
+  // Instant render - no AI in core version
+  currentPatients.forEach(function(p, i) {
+    var biz2 = document.getElementById('slotBiz') ? document.getElementById('slotBiz').value : '';
+    var tid = 'warm';
+    var sel = document.getElementById('tmpl-' + i);
+    if (sel) tid = sel.value;
+    var tmpl = TEMPLATES.find(function(t) { return t.id === tid; }) || TEMPLATES[0];
+    var r = applyTemplate(tmpl, p, currentDay, currentBlock, currentPrac, biz2);
+    setMsg(i, r.email, r.sms, false);
+  });
+}
+
+// ── Card UI ───────────────────────────────────────────────────────────────────
+function toggleCard(i) {
+  var body = document.getElementById('body-' + i);
+  var chev = document.getElementById('chev-' + i);
+  var open = body.classList.contains('open');
+  body.classList.toggle('open', !open);
+  chev.style.transform = open ? '' : 'rotate(90deg)';
+}
+
+function switchTab(i, tab) {
+  var ep = document.getElementById('epane-' + i);
+  var sp = document.getElementById('spane-' + i);
+  var te = document.getElementById('tab-email-' + i);
+  var ts = document.getElementById('tab-sms-' + i);
+  var lbl = document.getElementById('lbl-' + i);
+  var btn = document.getElementById('copymain-' + i);
+  if (tab === 'email' || tab === 0) {
+    ep.style.display = 'block'; sp.style.display = 'none';
+    te.classList.add('active'); ts.classList.remove('active');
+    if (lbl) lbl.childNodes[0].textContent = 'Draft email ';
+    if (btn) btn.textContent = 'Copy email';
+  } else {
+    ep.style.display = 'none'; sp.style.display = 'block';
+    te.classList.remove('active'); ts.classList.add('active');
+    if (lbl) lbl.childNodes[0].textContent = 'Draft SMS ';
+    if (btn) btn.textContent = 'Copy SMS';
+  }
+}
+
+function changeTemplate(i) {
+  var templateId = document.getElementById('tmpl-' + i).value;
+  var template = TEMPLATES.find(function(t) { return t.id === templateId; });
+  if (!template) return;
+  var p = currentPatients[i];
+  var biz = document.getElementById('slotBiz') ? document.getElementById('slotBiz').value : '';
+  var result = applyTemplate(template, p, currentDay, currentBlock, currentPrac, biz);
+  setMsg(i, result.email, result.sms, false);
+}
+
+function setMsg(i, email, sms, isAI) {
+  var gen = document.getElementById('gen-' + i);
+  var emailEl = document.getElementById('email-' + i);
+  var smsEl = document.getElementById('sms-' + i);
+  var ep = document.getElementById('epane-' + i);
+  var acts = document.getElementById('acts-' + i);
+  var badge = document.getElementById('aibadge-' + i);
+  if (gen) gen.style.display = 'none';
+  if (emailEl) emailEl.textContent = email;
+  if (ep) ep.style.display = 'block';
+  if (smsEl) { smsEl.textContent = sms; updateCC(i); }
+  if (acts) acts.style.display = 'flex';
+  if (badge) badge.style.display = isAI ? 'inline' : 'none';
+}
+
+function updateCC(i) {
+  var el = document.getElementById('sms-' + i);
+  var cc = document.getElementById('cc-' + i);
+  if (!el || !cc) return;
+  var len = el.innerText.length;
+  cc.textContent = len + ' / 160';
+  cc.className = 'char-count' + (len > 160 ? ' over' : '');
+}
+
+function copyMain(i, btn) {
+  var ep = document.getElementById('epane-' + i);
+  var isEmail = ep && ep.style.display !== 'none';
+  var el = document.getElementById(isEmail ? 'email-' + i : 'sms-' + i);
+  if (el) copyText(el.innerText, btn, isEmail ? 'Copy email' : 'Copy SMS');
+}
+
+function copyAddr(btn) {
+  var email = btn.getAttribute('data-email');
+  copyText(email, btn, 'Copy address');
+}
+
+function copyText(text, btn, resetLabel) {
+  navigator.clipboard.writeText(text).then(function() {
+    btn.textContent = 'Copied!'; btn.classList.add('copied');
+    setTimeout(function() { btn.textContent = resetLabel; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+function regenMsg(i) {
+  var btn = document.getElementById('regen-' + i);
+  var ep = document.getElementById('epane-' + i);
+  var gen = document.getElementById('gen-' + i);
+  var acts = document.getElementById('acts-' + i);
+  btn.disabled = true;
+  ep.style.display = 'none';
+  acts.style.display = 'none';
+  var p = currentPatients[i];
+  var biz3 = document.getElementById('slotBiz') ? document.getElementById('slotBiz').value : '';
+  var tid3 = 'warm';
+  var sel3 = document.getElementById('tmpl-' + i);
+  if (sel3) tid3 = sel3.value;
+  var tmpl3 = TEMPLATES.find(function(t) { return t.id === tid3; }) || TEMPLATES[0];
+  var r3 = applyTemplate(tmpl3, p, currentDay, currentBlock, currentPrac, biz3);
+  setMsg(i, r3.email, r3.sms, false);
+  btn.disabled = false;
 }
 
 // ── AI generation ─────────────────────────────────────────────────────────────
@@ -1189,26 +1933,6 @@ WRITING RULES:
     };
   }
 
-  try {
-    var resp = await fetch('https://osteo-proxy.michaelbrockway.workers.dev?target=anthropic', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 1000,
-        messages: [{role:'user', content: prompt}]
-      })
-    });
-    var data = await resp.json();
-    var text = data.content && data.content[0] && data.content[0].text ? data.content[0].text.trim() : null;
-    if (text && text.length > 40) {
-      var parts = text.split(/\n---\n/);
-      return {email: parts[0].trim(), sms: parts[1] ? parts[1].trim() : buildSMS(firstName, pracFirst, day, blockLabel, patient.complaint), isAI: true};
-    }
-  } catch(e) {}
 
   return {
     email: fallbackEmail(firstName, pracFirst, day, blockKey, patient.complaint, getBookingLink(prac, document.getElementById('slotBiz') ? document.getElementById('slotBiz').value : '')),
@@ -1461,31 +2185,27 @@ async function loadGaps() {
     var pracIdToName = {};
     practitioners.forEach(function(p) { pracIdToName[p.id] = p.first_name + ' ' + p.last_name; });
 
-    // Step 2: Load businesses FIRST so bizIdToName is ready
+    // Step 2: Load businesses and map IDs to names
     var bizData = await clinikoGet('businesses');
     var bizIdToName = {};
     if (bizData && bizData.businesses) {
-      bizData.businesses.forEach(function(b) { bizIdToName[String(b.id)] = b.name; });
-    }
-
-    // Step 3: If bizIdToName values are empty, fetch each business individually  
-    var bizIds = Object.keys(bizIdToName);
-    for (var bfi = 0; bfi < bizIds.length; bfi++) {
-      if (!bizIdToName[bizIds[bfi]]) {
-        var singleBiz = await clinikoGet('businesses/' + bizIds[bfi]);
-        if (singleBiz) {
-          bizIdToName[bizIds[bfi]] = singleBiz.name || singleBiz.business_name || 
-            singleBiz.display_name || singleBiz.title ||
-            (singleBiz.links && singleBiz.links.self ? 
-              Object.keys(singleBiz).filter(function(k) { return typeof singleBiz[k] === 'string' && singleBiz[k].length > 2 && singleBiz[k].length < 60; }).map(function(k) { return k + ':' + singleBiz[k]; }).join('|').slice(0,50) : 'Clinic ' + bizIds[bfi]);
+      bizData.businesses.forEach(function(b) {
+        // Try all possible name fields Cliniko might use
+        var name = b.name || b.business_name || b.display_name || b.title || '';
+        // If still empty, extract from self link
+        if (!name && b.links && b.links.self) {
+          name = 'Clinic ' + b.links.self.split('/').pop();
         }
-      }
+        bizIdToName[String(b.id)] = name;
+      });
     }
+    // Also build from appointments already loaded — more reliable
+    // We'll get business names from the individual appointment business links later
 
-    // Step 4: Load daily availabilities per business
+    // Step 3: Load daily availabilities per business (includes bizId context)
     statusEl.textContent = 'Loading working hours per clinic...';
     clinikoAvailabilities = [];
-    bizIds = Object.keys(bizIdToName);
+    var bizIds = Object.keys(bizIdToName);
     // Load daily availabilities per practitioner + derive clinic from appointments
     statusEl.textContent = 'Loading working hours...';
     clinikoAvailabilities = [];
@@ -1522,6 +2242,23 @@ async function loadGaps() {
         });
       }
     }
+
+    // Step 3: Load appointments for the week (paginate)
+    statusEl.textContent = 'Loading this week\'s appointments...';
+    var allAppts = [];
+    var page = 1;
+    while (true) {
+      var params = 'q[]=' + encodeURIComponent('starts_at:>' + fmt(monday)) +
+                   '&q[]=' + encodeURIComponent('starts_at:<' + fmt(sunday)) +
+                   '&per_page=100&page=' + page;
+      var data = await clinikoGet('individual_appointments', params);
+      if (!data || !data.individual_appointments) break;
+      allAppts = allAppts.concat(data.individual_appointments);
+      if (allAppts.length >= data.total_entries || data.individual_appointments.length < 100) break;
+      page++;
+    }
+    clinikoAppointments = allAppts;
+
     // Step 4: Calculate real gaps using working hours
     // Cliniko day_of_week: 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat, 7=Sun
     var clinikoDay = {Monday:1,Tuesday:2,Wednesday:3,Thursday:4,Friday:5,Saturday:6,Sunday:7};
@@ -1604,6 +2341,25 @@ async function loadGaps() {
         });
       });
     }
+
+    // Debug — show first 3 gaps
+    var debugEl = document.getElementById('clinikoStatus');
+    if (clinikoGaps.length > 0) {
+      var sample = clinikoGaps.slice(0,3).map(function(g) {
+        return g.pracName + ' | ' + (g.bizName || 'NO_BIZ') + ' | ' + g.dayName + ' ' + g.label;
+      }).join(' || ');
+      debugEl.textContent += ' | Sample gaps: ' + sample;
+    } else {
+      debugEl.textContent += ' | NO GAPS FOUND — check daily_availabilities';
+    }
+
+    // Debug gaps
+    var dbgGaps = document.getElementById('debugGaps');
+    if (!dbgGaps) { dbgGaps = document.createElement('div'); dbgGaps.id = 'debugGaps'; dbgGaps.style.cssText = 'margin-top:8px;padding:8px;background:#e8f5e9;border-radius:6px;font-size:11px;font-family:monospace;word-break:break-all;color:#333'; statusEl.parentNode.appendChild(dbgGaps); }
+    dbgGaps.innerHTML = 'clinikoAvailabilities count: ' + clinikoAvailabilities.length + '<br>' +
+      'clinikoGaps count: ' + clinikoGaps.length + '<br>' +
+      'Sample avail[0]: ' + (clinikoAvailabilities[0] ? JSON.stringify(clinikoAvailabilities[0]).slice(0,200) : 'none') + '<br>' +
+      'Sample gap[0]: ' + (clinikoGaps[0] ? JSON.stringify(clinikoGaps[0]).slice(0,200) : 'none');
 
     // Populate dropdowns
     populateGapDropdowns();
@@ -2011,18 +2767,17 @@ function renderResults() {
   var pw = document.getElementById('progressWrap');
   var pf = document.getElementById('progressFill');
   var pl = document.getElementById('progressLabel');
-  pw.style.display = 'block';
-  pf.style.width = '0%';
-  pl.textContent = 'Writing emails... 0 of ' + total;
+  pw.style.display = 'none';
 
+  // Instant render - no AI in core version
   currentPatients.forEach(function(p, i) {
-    generateMsg(p, currentDay, currentBlock, currentPrac).then(function(result) {
-      setMsg(i, result.email, result.sms, result.isAI);
-      done++;
-      pf.style.width = Math.round(done/total*100) + '%';
-      pl.textContent = done < total ? 'Writing emails... ' + done + ' of ' + total : '&#x2713; All ' + total + ' emails ready';
-      if (done >= total) setTimeout(function() { pw.style.display = 'none'; }, 2500);
-    });
+    var biz2 = document.getElementById('slotBiz') ? document.getElementById('slotBiz').value : '';
+    var tid = 'warm';
+    var sel = document.getElementById('tmpl-' + i);
+    if (sel) tid = sel.value;
+    var tmpl = TEMPLATES.find(function(t) { return t.id === tid; }) || TEMPLATES[0];
+    var r = applyTemplate(tmpl, p, currentDay, currentBlock, currentPrac, biz2);
+    setMsg(i, r.email, r.sms, false);
   });
 }
 
@@ -2062,20 +2817,7 @@ function changeTemplate(i) {
   var p = currentPatients[i];
   var biz = document.getElementById('slotBiz') ? document.getElementById('slotBiz').value : '';
   var result = applyTemplate(template, p, currentDay, currentBlock, currentPrac, biz);
-  // If AI template selected and we have a complaint, use AI
-  if (templateId === 'clinical' && p.complaint) {
-    var gen = document.getElementById('gen-' + i);
-    var ep = document.getElementById('epane-' + i);
-    var acts = document.getElementById('acts-' + i);
-    if (gen) gen.style.display = 'flex';
-    if (ep) ep.style.display = 'none';
-    if (acts) acts.style.display = 'none';
-    generateMsg(p, currentDay, currentBlock, currentPrac).then(function(r) {
-      setMsg(i, r.email, r.sms, r.isAI);
-    });
-  } else {
-    setMsg(i, result.email, result.sms, false);
-  }
+  setMsg(i, result.email, result.sms, false);
 }
 
 function setMsg(i, email, sms, isAI) {
@@ -2129,12 +2871,806 @@ function regenMsg(i) {
   btn.disabled = true;
   ep.style.display = 'none';
   acts.style.display = 'none';
-  gen.style.display = 'flex';
   var p = currentPatients[i];
-  generateMsg(p, currentDay, currentBlock, currentPrac).then(function(result) {
-    setMsg(i, result.email, result.sms, result.isAI);
-    btn.disabled = false;
+  var biz3 = document.getElementById('slotBiz') ? document.getElementById('slotBiz').value : '';
+  var tid3 = 'warm';
+  var sel3 = document.getElementById('tmpl-' + i);
+  if (sel3) tid3 = sel3.value;
+  var tmpl3 = TEMPLATES.find(function(t) { return t.id === tid3; }) || TEMPLATES[0];
+  var r3 = applyTemplate(tmpl3, p, currentDay, currentBlock, currentPrac, biz3);
+  setMsg(i, r3.email, r3.sms, false);
+  btn.disabled = false;
+}
+
+// ── AI generation ─────────────────────────────────────────────────────────────
+function getSlotLabel(blockKey) {
+  if (!blockKey) return 'morning';
+  if (blockKey.indexOf('exact-') === 0) {
+    var tp = blockKey.replace('exact-','').split(':');
+    var h = parseInt(tp[0]); var m = tp[1];
+    var ap = h >= 12 ? 'pm' : 'am'; var h12 = h % 12 || 12;
+    return h12 + ':' + m + ap;
+  }
+  return BLOCKS[blockKey] ? BLOCKS[blockKey].label : blockKey;
+}
+
+function isExactSlot(blockKey) {
+  return blockKey && blockKey.indexOf('exact-') === 0;
+}
+
+function buildSMS(firstName, pracFirst, day, blockKey, complaint) {
+  var slotLabel = getSlotLabel(blockKey);
+  var isExact = isExactSlot(blockKey);
+  var timeRef = isExact
+    ? day + ' ' + slotLabel + ' — a time ' + pracFirst + ' knows works well for you'
+    : day + ' ' + slotLabel + ' that suits your usual schedule';
+  var issue = complaint ? ' We wanted to check in on how you are going.' : '';
+  var bookingLink = getBookingLink(prac, document.getElementById('slotBiz') ? document.getElementById('slotBiz').value : '');
+  return 'Hi ' + firstName + ', it\'s the team at {business}. We have a ' + timeRef + ' available with ' + pracFirst + ' this week.' + issue + ' Book here: ' + bookingLink;
+}
+
+function fallbackEmail(firstName, pracFirst, day, blockKey, complaint, bookingLink) {
+  bookingLink = bookingLink || '[BOOKING LINK]';
+  var slotLabel = getSlotLabel(blockKey);
+  var isExact = isExactSlot(blockKey);
+  var timeRef = isExact
+    ? day + ' at ' + slotLabel + ' — ' + pracFirst + ' knows that time works well for you'
+    : day + ' ' + slotLabel + ' that suits your usual schedule';
+  if (complaint) {
+    return 'Hi ' + firstName + ',\n\nIt\'s been a while since your last visit, and we wanted to check in. We have a ' + timeRef + ' available with ' + pracFirst + ' this week.\n\nIf you\'ve been meaning to come back in, now\'s a great time. Simply reply to this email or book online: ' + bookingLink + '\n\nLooking forward to seeing you soon.';
+  }
+  return 'Hi ' + firstName + ',\n\nWe hope you\'re going well! We have a ' + timeRef + ' available with ' + pracFirst + ' this week and thought of you.\n\nIf you\'ve been meaning to come back in, now\'s a great time. Simply reply to this email or book online: ' + bookingLink + '\n\nLooking forward to seeing you soon.';
+}
+
+async function generateMsg(patient, day, blockKey, prac) {
+  var biz = document.getElementById('slotBiz') ? document.getElementById('slotBiz').value : '';
+  var selectedTemplateId = 'warm';
+  for (var ti = 0; ti < currentPatients.length; ti++) {
+    if (currentPatients[ti] === patient) {
+      var el = document.getElementById('tmpl-' + ti);
+      if (el) selectedTemplateId = el.value;
+      break;
+    }
+  }
+  var tmpl = TEMPLATES.find(function(t) { return t.id === selectedTemplateId; }) || TEMPLATES[0];
+  var r = applyTemplate(tmpl, patient, day, blockKey, prac, biz);
+  return { email: r.email, sms: r.sms, isAI: false };
+}
+
+
+
+// ── State ────────────────────────────────────────────────────────────────────
+var attendeesRows = [], notesRows = [], practitioners = [];
+var attendeesReady = false; // kept for CSV fallback
+var currentPatients = [], currentDay = '', currentBlock = '', currentPrac = '';
+
+var BOOKING_LINKS = {
+  'Shannon Walsh': {
+    'Tullamarine Osteopathy': 'https://bit.ly/3Px7ptF'
+  },
+  'Matt Spencer': {
+    'Greenvale Osteopathy': 'https://bit.ly/4venUcZ',
+    'Tullamarine Osteopathy': 'https://bit.ly/4fYbhyi'
+  },
+  'Shehan Kariyakaranage': {
+    'Tullamarine Osteopathy': 'https://bit.ly/4aj2vY4',
+    'Greenvale Osteopathy': 'https://bit.ly/4uD6EhH'
+  },
+  'Laura Addinsall': {
+    'Greenvale Osteopathy': 'https://bit.ly/4dImWQB',
+    'Tullamarine Osteopathy': 'https://bit.ly/4u5gKqI'
+  }
+};
+
+function getBookingLink(prac, biz) {
+  if (prac && biz && BOOKING_LINKS[prac] && BOOKING_LINKS[prac][biz]) {
+    return BOOKING_LINKS[prac][biz];
+  }
+  return '[BOOKING LINK]';
+}
+
+
+var TEMPLATES = [
+  {
+    id: 'warm',
+    name: 'Warm check-in',
+    isDefault: true,
+    shared: true,
+    email: 'Hi {firstName},\n\nHope you\'re going well! We have a {day} {timeSlot} spot available with {practitioner} this week — {practitioner} knows that time works well for you.\n\nIf you\'ve been meaning to come back in, now\'s a great time. Simply reply or book online: {bookingLink}\n\nLooking forward to seeing you soon.',
+    sms: 'Hi {firstName}, it\'s the team at Tulla Osteo / Greenvale Osteo. We have a {day} {timeSlot} spot with {practitioner} this week — {practitioner} knows that time works well for you. Book here: {bookingLink}'
+  },
+  {
+    id: 'urgent',
+    name: 'Urgency — 1 spot left',
+    isDefault: false,
+    shared: true,
+    email: 'Hi {firstName},\n\nJust a quick note — we have one {day} {timeSlot} spot left with {practitioner} this week and thought of you straight away.\n\nIf you\'d like it, grab it before it goes: {bookingLink}\n\nSpeak soon.',
+    sms: 'Hi {firstName}, one {day} {timeSlot} spot just opened with {practitioner} this week — thought of you. Grab it here: {bookingLink}'
+  },
+  {
+    id: 'brief',
+    name: 'Short and direct',
+    isDefault: false,
+    shared: true,
+    email: 'Hi {firstName},\n\nWe have a {day} {timeSlot} appointment available with {practitioner} this week that suits your usual schedule.\n\nBook here: {bookingLink}\n\nThe team',
+    sms: 'Hi {firstName} — {day} {timeSlot} spot available with {practitioner} this week. Book: {bookingLink}'
+  },
+  {
+    id: 'reintro',
+    name: 'Re-introduction (lapsed 12m+)',
+    isDefault: false,
+    shared: true,
+    email: 'Hi {firstName},\n\nIt\'s been a while since we last saw you and we wanted to reach out. We have a {day} {timeSlot} spot available with {practitioner} this week.\n\nIf you\'ve been dealing with anything that needs attention, or just want to check in and maintain your health, we\'d love to see you again.\n\nBook online here: {bookingLink}\n\nWarm regards,\nThe team',
+    sms: 'Hi {firstName}, it\'s been a while! We have a {day} {timeSlot} spot with {practitioner} this week if you\'d like to come back in. Book: {bookingLink}'
+  },
+  {
+    id: 'premium_weekend',
+    name: 'Premium spots — weekend send',
+    isDefault: false,
+    shared: true,
+    email: 'Hi {firstName},\n\nIt\'s the team at {business}. We have a couple of premium {timeSlot} spots left this week with {practitioner} — {practitioner} knows that time works well for you.\n\nIf you need an appointment, grab one here: {bookingLink}\n\nOtherwise hope you\'re having a great weekend!\n\nThe team at {business}',
+    sms: 'Hi {firstName}, it\'s the team at {business}. We have a couple of premium {timeSlot} spots left this week with {practitioner} — {practitioner} knows that time works well for you. If you need an appt, grab one here: {bookingLink} — otherwise hope you\'re having a great weekend!'
+  },
+  {
+    id: 'clinical',
+    name: 'Clinical hook (AI enhanced)',
+    isDefault: false,
+    shared: true,
+    email: 'Hi {firstName},\n\nWe have a {day} {timeSlot} spot available with {practitioner} this week and thought of you. It\'s been a while since your last visit and it\'s worth checking in to make sure things are tracking well.\n\nBook here: {bookingLink}\n\nLooking forward to seeing you.',
+    sms: 'Hi {firstName}, {practitioner} has a {day} {timeSlot} spot this week and wanted to check in on how you\'re going. Book: {bookingLink}'
+  }
+];
+
+function applyTemplate(template, patient, day, blockKey, prac, biz) {
+  var firstName = patient.name.split(' ')[0];
+  var pracFirst = prac ? prac.split(' ')[0] : 'your practitioner';
+  var slotLabel = getSlotLabel(blockKey);
+  var isExact = isExactSlot(blockKey);
+  var timeSlot = isExact ? day + ' at ' + slotLabel : day + ' ' + slotLabel;
+  var bookingLink = getBookingLink(prac, biz);
+
+  var bizName = biz || 'our clinic';
+
+  function fill(text) {
+    return text
+      .replace(/{firstName}/g, firstName)
+      .replace(/{practitioner}/g, pracFirst)
+      .replace(/{day}/g, day)
+      .replace(/{timeSlot}/g, timeSlot)
+      .replace(/{bookingLink}/g, bookingLink)
+      .replace(/{business}/g, bizName);
+  }
+  return { email: fill(template.email), sms: fill(template.sms) };
+}
+
+var BLOCKS = {
+  morning:   {label:'morning',   start:6,  end:12},
+  midday:    {label:'midday',    start:12, end:15},
+  afternoon: {label:'afternoon', start:15, end:18},
+  evening:   {label:'evening',   start:18, end:21}
+};
+
+// ── File upload ───────────────────────────────────────────────────────────────
+
+
+function readCSV(file, zoneId, textId, subId, label, onLoad) {
+  var zone = document.getElementById(zoneId);
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    var text = e.target.result;
+    var rows;
+    if (typeof Papa !== 'undefined') {
+      var result = Papa.parse(text, {header: true, skipEmptyLines: true});
+      rows = result.data;
+    } else {
+      rows = fallbackCSV(text);
+    }
+    zone.classList.add('loaded');
+    document.getElementById(textId).innerHTML = '<span class="loaded-text">&#x2713; ' + label + ' loaded</span>';
+    document.getElementById(subId).textContent = rows.length.toLocaleString() + ' records';
+    onLoad(rows);
+  };
+  reader.onerror = function() { alert('Could not read file. Please try again.'); };
+  reader.readAsText(file);
+}
+
+function fallbackCSV(text) {
+  var lines = text.split('\r\n');
+  if (lines.length < 2) lines = text.split('\n');
+  var headers = splitLine(lines[0]).map(function(h) { return h.replace(/^\uFEFF/, '').trim(); });
+  var rows = [];
+  for (var i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    var vals = splitLine(lines[i]);
+    var row = {};
+    headers.forEach(function(h, j) { row[h] = vals[j] || ''; });
+    rows.push(row);
+  }
+  return rows;
+}
+
+function splitLine(line) {
+  var result = [], cur = '', inQ = false;
+  for (var i = 0; i < line.length; i++) {
+    var c = line[i];
+    if (c === '"') { inQ = !inQ; }
+    else if (c === ',' && !inQ) { result.push(cur.trim()); cur = ''; }
+    else { cur += c; }
+  }
+  result.push(cur.trim());
+  return result;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function checkReady() {
+  var ok = attendeesReady && document.getElementById('slotDay').value && document.getElementById('slotBlock').value && document.getElementById('slotBiz').value;
+  document.getElementById('findBtn').disabled = !ok;
+}
+
+function stripHtml(t) {
+  return t.replace(/<[^>]+>/g, ' ').replace(/\u200b/g, '').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&nbsp;/g,' ').replace(/\s+/g,' ').trim();
+}
+
+function extractComplaint(text) {
+  if (!text || typeof text !== 'string') return null;
+  // Try each label variant separately to avoid complex regex
+  var labels = [
+    'Presenting Complaint',
+    'Patient Progress/Complaint',
+    'Patient Progress/complaint',
+    'Patient Progress report/complaint',
+    'Reason for visit'
+  ];
+  var m = null;
+  for (var li = 0; li < labels.length; li++) {
+    var tag = '[Question: ' + labels[li] + ']';
+    var idx = text.indexOf(tag);
+    if (idx === -1) continue;
+    var start = idx + tag.length;
+    var nextQ = text.indexOf('[Question:', start);
+    var chunk = nextQ === -1 ? text.slice(start) : text.slice(start, nextQ);
+    m = chunk;
+    break;
+  }
+  if (!m) return null;
+  var raw = stripHtml(m).trim().replace(/^\*\*.*?\*\*\s*/g,'').replace(/^PTS\s*[-\u2013]\s*/i,'').trim();
+  return raw.length >= 8 ? raw.slice(0, 400) : null;
+}
+
+function getComplaint(patientId) {
+  if (!false || !notesRows.length) return null;
+  var pid = String(patientId).trim();
+  var pnotes = notesRows.filter(function(r) { return String(r['Patient ID'] || '').trim() === pid && r['Text']; });
+  pnotes.sort(function(a, b) { return (b['CreatedAt'] || '').localeCompare(a['CreatedAt'] || ''); });
+  for (var i = 0; i < pnotes.length; i++) {
+    var c = extractComplaint(pnotes[i]['Text']);
+    if (c) return c;
+  }
+  return null;
+}
+
+function parseSlotDate(row) {
+  var s = row['Start Time'];
+  if (!s) return null;
+  var m = s.match(/^(\d{4}-\d{2}-\d{2}) (\d{2}):(\d{2})/);
+  if (!m) return null;
+  var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var d = new Date(m[1]);
+  return {day: days[d.getUTCDay()], hour: parseInt(m[2]), minute: parseInt(m[3])};
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return 'Unknown';
+  var d = new Date(dateStr);
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return d.getUTCDate() + ' ' + months[d.getUTCMonth()] + ' ' + d.getUTCFullYear();
+}
+
+function weeksAgo(dateStr) {
+  var d = new Date(dateStr);
+  return Math.floor((Date.now() - d.getTime()) / (1000*60*60*24*7));
+}
+
+function recencyDot(dateStr) {
+  var w = weeksAgo(dateStr);
+  if (w <= 13) return 'dot-hot';
+  if (w <= 52) return 'dot-warm';
+  return 'dot-cold';
+}
+
+function recencyLabel(dateStr) {
+  var w = weeksAgo(dateStr);
+  if (w <= 4) return 'Within last month';
+  if (w <= 13) return '~' + w + ' weeks ago';
+  if (w <= 52) return '~' + Math.round(w/4) + ' months ago';
+  return '~' + Math.round(w/52) + ' year' + (Math.round(w/52) > 1 ? 's' : '') + ' ago';
+}
+
+function initials(name) {
+  return name.split(' ').map(function(n) { return n[0]; }).join('').toUpperCase().slice(0,2);
+}
+
+function formatBlock(b) {
+  var map = {morning:'morning',midday:'midday',afternoon:'afternoon',evening:'evening'};
+  return map[b] || b;
+}
+
+// ── Find patients ─────────────────────────────────────────────────────────────
+async function findPatients() {
+  var day = document.getElementById('slotDay').value;
+  var blockKey = document.getElementById('slotBlock').value;
+  var prac = document.getElementById('slotPrac').value;
+  var selectedBiz = document.getElementById('slotBiz').value;
+  if (!day || !blockKey || !selectedBiz) { alert('Please select a day, time block and clinic.'); return; }
+  
+  // If we have loaded API data, use it. Otherwise fall back to CSV if loaded.
+  if (clinikoAppointments.length > 0) {
+    await findPatientsFromAPI(day, blockKey, prac, selectedBiz);
+    return;
+  }
+  
+  // CSV fallback
+  if (!attendeesReady) { alert('Please load this week\'s gaps first or upload a CSV.'); return; }
+
+  var isExact = blockKey.indexOf('exact-') === 0;
+  var block = isExact ? null : BLOCKS[blockKey];
+  var exactMins = 0;
+  var exactLabel = '';
+  if (isExact) {
+    var timePart = blockKey.replace('exact-', '');
+    var tp = timePart.split(':');
+    exactMins = parseInt(tp[0]) * 60 + parseInt(tp[1]);
+    var h = parseInt(tp[0]); var m = tp[1];
+    var ap = h >= 12 ? 'pm' : 'am'; var h12 = h % 12 || 12;
+    exactLabel = h12 + ':' + m + ap;
+  }
+  currentDay = day; currentBlock = blockKey; currentPrac = prac;
+
+  var notCancelled = attendeesRows.filter(function(r) {
+    return !r['Cancellation Time'] || !r['Cancellation Time'].trim();
   });
+
+  var matched = notCancelled.filter(function(r) {
+    var p = parseSlotDate(r);
+    if (!p) return false;
+    if (p.day !== day) return false;
+    if (isExact) {
+      var rowMins = p.hour * 60 + p.minute;
+      if (Math.abs(rowMins - exactMins) > 20) return false;
+    } else {
+      if (p.hour < block.start || p.hour >= block.end) return false;
+    }
+    // No practitioner filter here — match slot time regardless of who they saw
+    // Practitioner filter is applied at patient level based on last visit
+    return true;
+  });
+
+  // Build set of patients who already have a future appointment
+  var today = new Date().toISOString().slice(0, 10);
+  var hasUpcoming = {};
+  attendeesRows.forEach(function(r) {
+    if (r['Cancellation Time'] && r['Cancellation Time'].trim()) return;
+    var id = String(r['Patient ID'] || '').trim();
+    var s = r['Start Time'];
+    if (!id || !s) return;
+    if (s.slice(0, 10) > today) hasUpcoming[id] = true;
+  });
+
+  // Build overall last-visit lookup including last practitioner and last business
+  var lastVisitLookup = {};
+  var lastPracLookup = {};
+  var lastBizLookup = {};
+  attendeesRows.forEach(function(r) {
+    if (r['Cancellation Time'] && r['Cancellation Time'].trim()) return;
+    var id = String(r['Patient ID'] || '').trim();
+    var s = r['Start Time'];
+    if (!id || !s) return;
+    var d = s.slice(0, 10);
+    if (!lastVisitLookup[id] || d > lastVisitLookup[id]) {
+      lastVisitLookup[id] = d;
+      lastPracLookup[id] = r['Practitioner'] || '';
+      lastBizLookup[id] = r['Business'] || '';
+    }
+  });
+
+  var byPatient = {};
+  matched.forEach(function(r) {
+    var id = String(r['Patient ID'] || '').trim();
+    var name = r['Patient'];
+    var s = r['Start Time'];
+    if (!id || !name || !s) return;
+    var dateStr = s.slice(0, 10);
+    if (!byPatient[id]) byPatient[id] = {id:id, name:name, email:r['Patient Email']||'', dates:[]};
+    byPatient[id].dates.push(dateStr);
+  });
+
+  currentPatients = Object.keys(byPatient).filter(function(id) {
+    if (hasUpcoming[id]) return false;
+    if (byPatient[id].dates.length < 2) return false;
+    // Must have last visited same business as selected clinic
+    if (lastBizLookup[id] !== selectedBiz) return false;
+    // Must have last visited same practitioner if one selected
+    if (prac && lastPracLookup[id] !== prac) return false;
+    return true;
+  }).map(function(id) {
+    var p = byPatient[id];
+    p.dates.sort(function(a,b) { return b.slice(0,10).localeCompare(a.slice(0,10)); });
+    p.lastSlotVisit = p.dates[0];
+    p.lastVisit = lastVisitLookup[id] || p.dates[0];
+    p.lastPrac = lastPracLookup[id] || '';
+    p.lastBiz = lastBizLookup[id] || '';
+    p.visitCount = p.dates.length;
+    p.complaint = getComplaint(id);
+    return p;
+  });
+
+  currentPatients.sort(function(a,b) {
+    var wa = weeksAgo(a.lastVisit), wb = weeksAgo(b.lastVisit);
+    return wa !== wb ? wa - wb : b.visitCount - a.visitCount;
+  });
+
+  renderResults();
+}
+
+// ── API-based patient matching ────────────────────────────────────────────────
+async function findPatientsFromAPI(day, blockKey, prac, selectedBiz) {
+  currentDay = day; currentBlock = blockKey; currentPrac = prac;
+
+  var statusEl = document.getElementById('clinikoStatus');
+  statusEl.style.color = 'var(--ink-light)';
+  statusEl.textContent = 'Finding matched patients...';
+
+  var isExact = blockKey.indexOf('exact-') === 0;
+  var block = isExact ? null : BLOCKS[blockKey];
+  var exactMins = 0;
+  if (isExact) {
+    var tp = blockKey.replace('exact-','').split(':');
+    exactMins = parseInt(tp[0]) * 60 + parseInt(tp[1]);
+  }
+
+  try {
+    // Get date range — look back 2 years for history
+    var today = new Date();
+    var twoYearsAgo = new Date(today);
+    twoYearsAgo.setFullYear(today.getFullYear() - 2);
+    var fmt = function(d) { return d.toISOString().split('.')[0] + 'Z'; };
+
+    // Build day-of-week filter — get appointments on matching day
+    var dayNums = {Monday:1,Tuesday:2,Wednesday:3,Thursday:4,Friday:5,Saturday:6,Sunday:0};
+    var targetDayNum = dayNums[day];
+
+    statusEl.textContent = 'Loading appointment history (this may take a moment)...';
+
+    // Load historical appointments in batches
+    var allHistory = [];
+    var page = 1;
+    var maxPages = 20; // cap at ~2000 records to avoid timeout
+    while (page <= maxPages) {
+      var params = 'q[]=' + encodeURIComponent('starts_at:>' + fmt(twoYearsAgo)) +
+                   '&q[]=' + encodeURIComponent('starts_at:<' + fmt(today)) +
+                   '&per_page=100&page=' + page;
+      var data = await clinikoGet('individual_appointments', params);
+      if (!data || !data.individual_appointments || data.individual_appointments.length === 0) break;
+      allHistory = allHistory.concat(data.individual_appointments);
+      if (allHistory.length >= Math.min(data.total_entries, 2000)) break;
+      page++;
+    }
+
+    statusEl.textContent = 'Analysing ' + allHistory.length + ' appointments...';
+
+    // Also get all patients in history to get names/emails
+    var patientIds = new Set();
+    allHistory.forEach(function(a) {
+      if (a.patient) patientIds.add(a.patient.links.self.split('/').pop());
+    });
+
+    // Build last visit lookup from history
+    var lastVisitLookup = {};
+    var lastPracLookup = {};
+    var lastBizLookup = {};
+    var hasUpcoming = {};
+
+    // Check upcoming from this week's loaded appointments
+    var todayStr = today.toISOString().slice(0,10);
+    clinikoAppointments.forEach(function(a) {
+      if (a.cancelled_at || a.deleted_at) return;
+      var pid = a.patient ? a.patient.links.self.split('/').pop() : null;
+      if (!pid) return;
+      var startStr = (a.starts_at || '').slice(0,10);
+      if (startStr >= todayStr) hasUpcoming[pid] = true;
+    });
+
+    // Build history lookups
+    allHistory.forEach(function(a) {
+      if (a.cancelled_at || a.deleted_at) return;
+      var pid = a.patient ? a.patient.links.self.split('/').pop() : null;
+      if (!pid) return;
+      var startStr = (a.starts_at || '').slice(0,10);
+      if (!lastVisitLookup[pid] || startStr > lastVisitLookup[pid]) {
+        lastVisitLookup[pid] = startStr;
+        lastPracLookup[pid] = a.practitioner ? a.practitioner.links.self.split('/').pop() : '';
+        lastBizLookup[pid] = a.business ? a.business.links.self.split('/').pop() : '';
+      }
+    });
+
+    // Match appointments to selected slot
+    var slotMatches = allHistory.filter(function(a) {
+      if (a.cancelled_at || a.deleted_at) return false;
+      var start = new Date(a.starts_at);
+      if (start.getDay() !== targetDayNum) return false;
+      var mins = start.getHours() * 60 + start.getMinutes();
+      if (isExact) {
+        return Math.abs(mins - exactMins) <= 20;
+      } else {
+        return mins >= block.start * 60 && mins < block.end * 60;
+      }
+    });
+
+    // Group by patient
+    var byPatient = {};
+    slotMatches.forEach(function(a) {
+      var pid = a.patient ? a.patient.links.self.split('/').pop() : null;
+      if (!pid) return;
+      var patientName = a.patient_name || ('Patient ' + pid);
+      var dateStr = (a.starts_at || '').slice(0,10);
+      if (!byPatient[pid]) byPatient[pid] = { id: pid, name: patientName, email: '', dates: [], pracIds: [] };
+      byPatient[pid].dates.push(dateStr);
+    });
+
+    // Get business IDs to filter by clinic
+    var bizData = await clinikoGet('businesses');
+    var bizIdMap = {};
+    if (bizData && bizData.businesses) {
+      bizData.businesses.forEach(function(b) {
+        bizIdMap[b.id] = b.name;
+      });
+    }
+
+    // Map lastBiz IDs to names
+    var lastBizNameLookup = {};
+    Object.keys(lastBizLookup).forEach(function(pid) {
+      var bizId = lastBizLookup[pid];
+      lastBizNameLookup[pid] = bizIdMap[bizId] || '';
+    });
+
+    // Map lastPrac IDs to names
+    var pracData = await clinikoGet('practitioners');
+    var pracIdMap = {};
+    if (pracData && pracData.practitioners) {
+      pracData.practitioners.forEach(function(p) {
+        pracIdMap[p.id] = p.first_name + ' ' + p.last_name;
+      });
+    }
+    var lastPracNameLookup = {};
+    Object.keys(lastPracLookup).forEach(function(pid) {
+      lastPracNameLookup[pid] = pracIdMap[lastPracLookup[pid]] || '';
+    });
+
+    // Filter and build currentPatients
+    var contactSuppression = 60; // days
+    var suppressBefore = new Date(today);
+    suppressBefore.setDate(suppressBefore.getDate() - contactSuppression);
+    var suppressStr = suppressBefore.toISOString().slice(0,10);
+
+    currentPatients = Object.keys(byPatient).filter(function(pid) {
+      var p = byPatient[pid];
+      if (hasUpcoming[pid]) return false;
+      if (p.dates.length < 2) return false;
+      // Clinic filter — last visit must be at selected clinic
+      if (selectedBiz && lastBizNameLookup[pid] !== selectedBiz) return false;
+      // Practitioner filter
+      if (prac && lastPracNameLookup[pid] !== prac) return false;
+      return true;
+    }).map(function(pid) {
+      var p = byPatient[pid];
+      p.dates.sort(function(a,b) { return b.localeCompare(a); });
+      p.lastSlotVisit = p.dates[0];
+      p.lastVisit = lastVisitLookup[pid] || p.dates[0];
+      p.lastPrac = lastPracNameLookup[pid] || '';
+      p.lastBiz = lastBizNameLookup[pid] || '';
+      p.visitCount = p.dates.length;
+      p.complaint = '';
+      return p;
+    });
+
+    currentPatients.sort(function(a,b) {
+      var wa = weeksAgo(a.lastVisit), wb = weeksAgo(b.lastVisit);
+      return wa !== wb ? wa - wb : b.visitCount - a.visitCount;
+    });
+
+    statusEl.style.color = 'var(--sage)';
+    statusEl.textContent = '✓ ' + currentPatients.length + ' matched patients found';
+
+    renderResults();
+
+  } catch(e) {
+    statusEl.style.color = '#c0392b';
+    statusEl.textContent = '✗ ' + e.message;
+    console.error(e);
+  }
+}
+
+
+// ── Render ────────────────────────────────────────────────────────────────────
+function renderResults() {
+  var section = document.getElementById('resultsSection');
+  var divider = document.getElementById('resultsDivider');
+  var list = document.getElementById('resultsList');
+  var countEl = document.getElementById('resultsCount');
+
+  section.style.display = 'block';
+  divider.style.display = 'block';
+  list.innerHTML = '';
+  countEl.textContent = currentPatients.length + ' patient' + (currentPatients.length !== 1 ? 's' : '') + ' found';
+  section.scrollIntoView({behavior:'smooth', block:'start'});
+
+  if (!currentPatients.length) {
+    list.innerHTML = '<div class="empty-state"><p>No patients found for this slot.</p><p style="margin-top:.5rem;font-size:13px">Try adjusting the day, block, or removing the practitioner filter.</p></div>';
+    return;
+  }
+
+  currentPatients.forEach(function(p, i) {
+    var shortC = p.complaint ? p.complaint.slice(0,90) + (p.complaint.length > 90 ? '...' : '') : null;
+    var card = document.createElement('div');
+    card.className = 'patient-card';
+    card.id = 'card-' + i;
+    card.innerHTML =
+      '<div class="card-header" onclick="toggleCard(' + i + ')">' +
+        '<div class="patient-info">' +
+          '<div class="avatar">' + initials(p.name) + '</div>' +
+          '<div><div class="patient-name">' + p.name + '</div>' +
+          '<div class="patient-meta">' + (p.email || 'No email on file') + '</div></div>' +
+        '</div>' +
+        '<div class="card-stats">' +
+          '<div class="stat"><div class="stat-value">' + p.visitCount + '</div><div class="stat-label">visits at slot</div></div>' +
+          '<div class="stat"><div class="stat-value" style="font-size:13px;font-weight:400;color:var(--ink-mid)">' + formatDate(p.lastVisit) + '</div><div class="stat-label">last visit</div></div>' +
+          '<span class="dot ' + recencyDot(p.lastVisit) + '"></span>' +
+          '<span class="chevron" id="chev-' + i + '">&#x203A;</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="card-body" id="body-' + i + '">' +
+        (shortC ? '<div class="complaint-pill">&#x1F4CC; ' + shortC + '</div>' : '') +
+        '<div class="template-bar">' +
+          '<span class="template-label">Template</span>' +
+          '<select class="template-select" id="tmpl-' + i + '" onchange="changeTemplate(' + i + ')">' +
+          TEMPLATES.map(function(t) { return '<option value="' + t.id + '"' + (t.isDefault ? ' selected' : '') + '>' + t.name + '</option>'; }).join('') +
+          '</select>' +
+        '</div>' +
+        '<div class="tab-row">' +
+          '<button class="tab-btn active" id="tab-email-' + i + '" onclick="switchTab(' + i + ',0)">&#x2709; Email</button>' +
+          '<button class="tab-btn" id="tab-sms-' + i + '" onclick="switchTab(' + i + ',1)">&#x1F4AC; SMS</button>' +
+        '</div>' +
+        '<div class="section-label" id="lbl-' + i + '">Draft email <span class="ai-badge" id="aibadge-' + i + '" style="display:none">AI written</span></div>' +
+        '<div class="generating" id="gen-' + i + '"><span class="spinner"></span> Writing personalised message...</div>' +
+        '<div id="epane-' + i + '" style="display:none"><div class="email-box" contenteditable="true" id="email-' + i + '"></div></div>' +
+        '<div id="spane-' + i + '" style="display:none"><div class="sms-box" contenteditable="true" id="sms-' + i + '" oninput="updateCC(' + i + ')"></div><div class="char-count" id="cc-' + i + '">0 / 160</div></div>' +
+        '<div class="card-actions" id="acts-' + i + '" style="display:none">' +
+          '<button class="btn-sm" id="copymain-' + i + '" onclick="copyMain(' + i + ',this)">Copy email</button>' +
+          (p.email ? '<button class="btn-sm" data-email="' + p.email + '" onclick="copyAddr(this)">Copy address</button>' : '') +
+          '<button class="btn-sm" id="regen-' + i + '" onclick="regenMsg(' + i + ')">&#x21BA; Regenerate</button>' +
+        '</div>' +
+      '</div>';
+    list.appendChild(card);
+  });
+
+  var done = 0;
+  var total = currentPatients.length;
+  var pw = document.getElementById('progressWrap');
+  var pf = document.getElementById('progressFill');
+  var pl = document.getElementById('progressLabel');
+  pw.style.display = 'none';
+
+  // Instant render - no AI in core version
+  currentPatients.forEach(function(p, i) {
+    var biz2 = document.getElementById('slotBiz') ? document.getElementById('slotBiz').value : '';
+    var tid = 'warm';
+    var sel = document.getElementById('tmpl-' + i);
+    if (sel) tid = sel.value;
+    var tmpl = TEMPLATES.find(function(t) { return t.id === tid; }) || TEMPLATES[0];
+    var r = applyTemplate(tmpl, p, currentDay, currentBlock, currentPrac, biz2);
+    setMsg(i, r.email, r.sms, false);
+  });
+}
+
+// ── Card UI ───────────────────────────────────────────────────────────────────
+function toggleCard(i) {
+  var body = document.getElementById('body-' + i);
+  var chev = document.getElementById('chev-' + i);
+  var open = body.classList.contains('open');
+  body.classList.toggle('open', !open);
+  chev.style.transform = open ? '' : 'rotate(90deg)';
+}
+
+function switchTab(i, tab) {
+  var ep = document.getElementById('epane-' + i);
+  var sp = document.getElementById('spane-' + i);
+  var te = document.getElementById('tab-email-' + i);
+  var ts = document.getElementById('tab-sms-' + i);
+  var lbl = document.getElementById('lbl-' + i);
+  var btn = document.getElementById('copymain-' + i);
+  if (tab === 'email' || tab === 0) {
+    ep.style.display = 'block'; sp.style.display = 'none';
+    te.classList.add('active'); ts.classList.remove('active');
+    if (lbl) lbl.childNodes[0].textContent = 'Draft email ';
+    if (btn) btn.textContent = 'Copy email';
+  } else {
+    ep.style.display = 'none'; sp.style.display = 'block';
+    te.classList.remove('active'); ts.classList.add('active');
+    if (lbl) lbl.childNodes[0].textContent = 'Draft SMS ';
+    if (btn) btn.textContent = 'Copy SMS';
+  }
+}
+
+function changeTemplate(i) {
+  var templateId = document.getElementById('tmpl-' + i).value;
+  var template = TEMPLATES.find(function(t) { return t.id === templateId; });
+  if (!template) return;
+  var p = currentPatients[i];
+  var biz = document.getElementById('slotBiz') ? document.getElementById('slotBiz').value : '';
+  var result = applyTemplate(template, p, currentDay, currentBlock, currentPrac, biz);
+  setMsg(i, result.email, result.sms, false);
+}
+
+function setMsg(i, email, sms, isAI) {
+  var gen = document.getElementById('gen-' + i);
+  var emailEl = document.getElementById('email-' + i);
+  var smsEl = document.getElementById('sms-' + i);
+  var ep = document.getElementById('epane-' + i);
+  var acts = document.getElementById('acts-' + i);
+  var badge = document.getElementById('aibadge-' + i);
+  if (gen) gen.style.display = 'none';
+  if (emailEl) emailEl.textContent = email;
+  if (ep) ep.style.display = 'block';
+  if (smsEl) { smsEl.textContent = sms; updateCC(i); }
+  if (acts) acts.style.display = 'flex';
+  if (badge) badge.style.display = isAI ? 'inline' : 'none';
+}
+
+function updateCC(i) {
+  var el = document.getElementById('sms-' + i);
+  var cc = document.getElementById('cc-' + i);
+  if (!el || !cc) return;
+  var len = el.innerText.length;
+  cc.textContent = len + ' / 160';
+  cc.className = 'char-count' + (len > 160 ? ' over' : '');
+}
+
+function copyMain(i, btn) {
+  var ep = document.getElementById('epane-' + i);
+  var isEmail = ep && ep.style.display !== 'none';
+  var el = document.getElementById(isEmail ? 'email-' + i : 'sms-' + i);
+  if (el) copyText(el.innerText, btn, isEmail ? 'Copy email' : 'Copy SMS');
+}
+
+function copyAddr(btn) {
+  var email = btn.getAttribute('data-email');
+  copyText(email, btn, 'Copy address');
+}
+
+function copyText(text, btn, resetLabel) {
+  navigator.clipboard.writeText(text).then(function() {
+    btn.textContent = 'Copied!'; btn.classList.add('copied');
+    setTimeout(function() { btn.textContent = resetLabel; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+function regenMsg(i) {
+  var btn = document.getElementById('regen-' + i);
+  var ep = document.getElementById('epane-' + i);
+  var gen = document.getElementById('gen-' + i);
+  var acts = document.getElementById('acts-' + i);
+  btn.disabled = true;
+  ep.style.display = 'none';
+  acts.style.display = 'none';
+  var p = currentPatients[i];
+  var biz3 = document.getElementById('slotBiz') ? document.getElementById('slotBiz').value : '';
+  var tid3 = 'warm';
+  var sel3 = document.getElementById('tmpl-' + i);
+  if (sel3) tid3 = sel3.value;
+  var tmpl3 = TEMPLATES.find(function(t) { return t.id === tid3; }) || TEMPLATES[0];
+  var r3 = applyTemplate(tmpl3, p, currentDay, currentBlock, currentPrac, biz3);
+  setMsg(i, r3.email, r3.sms, false);
+  btn.disabled = false;
 }
 
 // ── AI generation ─────────────────────────────────────────────────────────────
@@ -2259,26 +3795,6 @@ WRITING RULES:
     };
   }
 
-  try {
-    var resp = await fetch('https://osteo-proxy.michaelbrockway.workers.dev?target=anthropic', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 1000,
-        messages: [{role:'user', content: prompt}]
-      })
-    });
-    var data = await resp.json();
-    var text = data.content && data.content[0] && data.content[0].text ? data.content[0].text.trim() : null;
-    if (text && text.length > 40) {
-      var parts = text.split(/\n---\n/);
-      return {email: parts[0].trim(), sms: parts[1] ? parts[1].trim() : buildSMS(firstName, pracFirst, day, blockLabel, patient.complaint), isAI: true};
-    }
-  } catch(e) {}
 
   return {
     email: fallbackEmail(firstName, pracFirst, day, blockKey, patient.complaint, getBookingLink(prac, document.getElementById('slotBiz') ? document.getElementById('slotBiz').value : '')),
@@ -2531,25 +4047,40 @@ async function loadGaps() {
     var pracIdToName = {};
     practitioners.forEach(function(p) { pracIdToName[p.id] = p.first_name + ' ' + p.last_name; });
 
-    // Step 2: Load businesses FIRST so bizIdToName is ready
+    // Step 2: Load businesses and map IDs to names
     var bizData = await clinikoGet('businesses');
     var bizIdToName = {};
     if (bizData && bizData.businesses) {
-      bizData.businesses.forEach(function(b) { bizIdToName[String(b.id)] = b.name; });
+      bizData.businesses.forEach(function(b) {
+        // Try all possible name fields Cliniko might use
+        var name = b.name || b.business_name || b.display_name || b.title || '';
+        // If still empty, extract from self link
+        if (!name && b.links && b.links.self) {
+          name = 'Clinic ' + b.links.self.split('/').pop();
+        }
+        bizIdToName[String(b.id)] = name;
+      });
     }
+    // Also build from appointments already loaded — more reliable
+    // We'll get business names from the individual appointment business links later
 
-    // Step 3: Load daily availabilities for each practitioner
-    statusEl.textContent = 'Loading working hours for ' + practitioners.length + ' practitioners...';
+    // Step 3: Load daily availabilities per business (includes bizId context)
+    statusEl.textContent = 'Loading working hours per clinic...';
     clinikoAvailabilities = [];
-    for (var pi = 0; pi < practitioners.length; pi++) {
-      var prac = practitioners[pi];
-      var availData = await clinikoGet('practitioners/' + prac.id + '/daily_availabilities');
+    var bizIds = Object.keys(bizIdToName);
+    for (var bi = 0; bi < bizIds.length; bi++) {
+      var bizId = bizIds[bi];
+      var availData = await clinikoGet('businesses/' + bizId + '/daily_availabilities');
+      // Debug output
+      var dbg = document.getElementById('debugOut');
+      if (!dbg) { dbg = document.createElement('div'); dbg.id = 'debugOut'; dbg.style.cssText = 'margin-top:8px;padding:8px;background:#f0f0ee;border-radius:6px;font-size:11px;font-family:monospace;word-break:break-all;color:#333'; statusEl.parentNode.appendChild(dbg); }
+      dbg.innerHTML += '<br><strong>Biz ' + bizId + ' (' + bizIdToName[bizId] + '):</strong> keys=' + (availData ? Object.keys(availData).join(',') : 'null') + ' count=' + (availData && availData.daily_availabilities ? availData.daily_availabilities.length : 0) + ' sample=' + (availData && availData.daily_availabilities && availData.daily_availabilities[0] ? JSON.stringify(availData.daily_availabilities[0]).slice(0,200) : 'none');
       if (availData && availData.daily_availabilities) {
         availData.daily_availabilities.forEach(function(da) {
-          var bizId = da.business ? String(da.business.links.self.split('/').pop()) : '';
+          var pracId = da.practitioner ? String(da.practitioner.links.self.split('/').pop()) : '';
           clinikoAvailabilities.push({
-            pracId: prac.id,
-            pracName: pracIdToName[prac.id],
+            pracId: pracId,
+            pracName: pracIdToName[pracId] || pracId,
             bizId: bizId,
             bizName: bizIdToName[bizId] || '',
             dayOfWeek: da.day_of_week,
@@ -2657,6 +4188,25 @@ async function loadGaps() {
         });
       });
     }
+
+    // Debug — show first 3 gaps
+    var debugEl = document.getElementById('clinikoStatus');
+    if (clinikoGaps.length > 0) {
+      var sample = clinikoGaps.slice(0,3).map(function(g) {
+        return g.pracName + ' | ' + (g.bizName || 'NO_BIZ') + ' | ' + g.dayName + ' ' + g.label;
+      }).join(' || ');
+      debugEl.textContent += ' | Sample gaps: ' + sample;
+    } else {
+      debugEl.textContent += ' | NO GAPS FOUND — check daily_availabilities';
+    }
+
+    // Debug gaps
+    var dbgGaps = document.getElementById('debugGaps');
+    if (!dbgGaps) { dbgGaps = document.createElement('div'); dbgGaps.id = 'debugGaps'; dbgGaps.style.cssText = 'margin-top:8px;padding:8px;background:#e8f5e9;border-radius:6px;font-size:11px;font-family:monospace;word-break:break-all;color:#333'; statusEl.parentNode.appendChild(dbgGaps); }
+    dbgGaps.innerHTML = 'clinikoAvailabilities count: ' + clinikoAvailabilities.length + '<br>' +
+      'clinikoGaps count: ' + clinikoGaps.length + '<br>' +
+      'Sample avail[0]: ' + (clinikoAvailabilities[0] ? JSON.stringify(clinikoAvailabilities[0]).slice(0,200) : 'none') + '<br>' +
+      'Sample gap[0]: ' + (clinikoGaps[0] ? JSON.stringify(clinikoGaps[0]).slice(0,200) : 'none');
 
     // Populate dropdowns
     populateGapDropdowns();
