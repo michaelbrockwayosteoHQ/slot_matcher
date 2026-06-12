@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Volumiser</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    /* Pulled directly from logo */
+    --bg:          #0D1117;   /* logo background */
+    --surface:     #131B27;   /* one step lighter */
+    --elevated:    #1A2336;   /* cards/inputs */
+    --border:      #1F2D42;
+    --teal:        #00C9A7;   /* logo teal (base of gradient) */
+    --green:       #00F5A0;   /* logo bright green (top of gradient) */
+    --grad:        linear-gradient(135deg, #00C9A7, #00F5A0);
+    --muted:       #3D5068;
+    --text-soft:   #7A8FA6;
+    --text:        #C8D8E8;
+    --text-bright: #F0F6FF;
+  }
+
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; font-size: 14px; line-height: 1.5; }
+
+  .app { display: flex; height: 100vh; overflow: hidden; }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 224px; min-width: 224px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+  }
+
+  .sidebar-logo {
+    padding: 18px 20px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+
+  /* SVG recreation of the logo mark — simplified */
+  .logo-icon {
+    width: 28px; height: 28px; flex-shrink: 0;
+  }
+
+  .logo-wordmark {
+    font-size: 17px; font-weight: 700;
+    color: var(--text-bright);
+    letter-spacing: -0.3px;
+  }
+  /* Teal dot on the i — recreated as a styled span */
+  .logo-wordmark .logo-i {
+    position: relative; display: inline-block;
+  }
+  .logo-wordmark .logo-i::before {
+    content: '';
+    position: absolute; top: -1px; left: 50%; transform: translateX(-50%);
+    width: 4px; height: 4px; border-radius: 50%;
+    background: var(--teal);
+  }
+
+  .sidebar-ticker {
+    margin: 12px 14px;
+    background: rgba(0, 245, 160, 0.07);
+    border: 1px solid rgba(0, 245, 160, 0.18);
+    border-radius: 8px;
+    padding: 9px 12px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .ticker-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 8px var(--green);
+    flex-shrink: 0;
+    animation: glow 2.2s ease-in-out infinite;
+  }
+  @keyframes glow {
+    0%, 100% { opacity: 1; box-shadow: 0 0 8px var(--green); }
+    50% { opacity: 0.5; box-shadow: 0 0 3px var(--green); }
+  }
+  .ticker-text { font-size: 11.5px; color: var(--green); font-weight: 600; }
+
+  .nav { flex: 1; padding: 6px 10px; display: flex; flex-direction: column; gap: 1px; }
+
+  .nav-label {
+    font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+    color: var(--muted); text-transform: uppercase;
+    padding: 14px 8px 5px;
+  }
+
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: 7px;
+    cursor: pointer; color: var(--text-soft);
+    font-size: 13px; font-weight: 500;
+    transition: background 0.13s, color 0.13s;
+    border: none; background: none; width: 100%; text-align: left;
+    position: relative;
+  }
+  .nav-item:hover { background: var(--elevated); color: var(--text); }
+  .nav-item.active {
+    background: rgba(0, 201, 167, 0.1);
+    color: var(--teal);
+  }
+  .nav-item.active::before {
+    content: '';
+    position: absolute; left: 0; top: 20%; bottom: 20%;
+    width: 2.5px; border-radius: 2px;
+    background: var(--grad);
+  }
+  .nav-icon { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0; opacity: 0.85; }
+  .nav-badge {
+    margin-left: auto;
+    background: var(--teal); color: var(--bg);
+    font-size: 10px; font-weight: 800;
+    padding: 1px 6px; border-radius: 20px; min-width: 20px; text-align: center;
+  }
+  .nav-badge-pill {
+    margin-left: auto;
+    background: rgba(0,201,167,0.12); color: var(--teal);
+    font-size: 10px; font-weight: 700;
+    padding: 2px 7px; border-radius: 20px;
+    border: 1px solid rgba(0,201,167,0.2);
+  }
+
+  .sidebar-footer {
+    padding: 12px 14px;
+    border-top: 1px solid var(--border);
+  }
+  .clinic-pill {
+    display: flex; align-items: center; gap: 10px;
+    padding: 8px 10px; border-radius: 8px;
+    cursor: pointer;
+    background: var(--elevated);
+    border: 1px solid var(--border);
+    transition: border-color 0.13s;
+  }
+  .clinic-pill:hover { border-color: var(--teal); }
+  .clinic-avatar {
+    width: 30px; height: 30px; border-radius: 7px;
+    background: var(--grad);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 800; color: var(--bg);
+    flex-shrink: 0;
+  }
+  .clinic-name { font-size: 12.5px; font-weight: 600; color: var(--text); }
+  .clinic-sub { font-size: 10px; color: var(--muted); }
+  .clinic-chevron { margin-left: auto; color: var(--muted); font-size: 11px; }
+
+  /* ── Main ── */
+  .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+  .topbar {
+    height: 58px; min-height: 58px;
+    border-bottom: 1px solid var(--border);
+    padding: 0 26px;
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface);
+  }
+  .page-heading { font-size: 15px; font-weight: 700; color: var(--text-bright); }
+  .page-sub { font-size: 11.5px; color: var(--muted); margin-top: 1px; }
+
+  .topbar-right { display: flex; align-items: center; gap: 10px; }
+
+  .timing-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: rgba(0, 245, 160, 0.07);
+    border: 1px solid rgba(0, 245, 160, 0.2);
+    border-radius: 6px; padding: 5px 11px;
+    font-size: 11.5px; font-weight: 600; color: var(--green);
+  }
+
+  .btn {
+    padding: 8px 15px; border-radius: 7px;
+    font-size: 12.5px; font-weight: 600;
+    cursor: pointer; border: none;
+    display: flex; align-items: center; gap: 6px;
+    transition: all 0.13s;
+  }
+  .btn-ghost {
+    background: transparent; color: var(--text-soft);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover { background: var(--elevated); color: var(--text); border-color: var(--text-soft); }
+  .btn-primary {
+    background: var(--grad); color: var(--bg);
+    font-weight: 700;
+  }
+  .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); box-shadow: 0 4px 14px rgba(0,201,167,0.35); }
+
+  /* ── Content ── */
+  .content {
+    flex: 1; overflow-y: auto;
+    padding: 22px 26px;
+    display: flex; flex-direction: column; gap: 18px;
+  }
+  .content::-webkit-scrollbar { width: 4px; }
+  .content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* ── Stats ── */
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 15px 17px;
+  }
+  .stat-label {
+    font-size: 10.5px; font-weight: 700; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin-bottom: 7px;
+  }
+  .stat-value {
+    font-size: 27px; font-weight: 800;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-bright); letter-spacing: -1.5px;
+    line-height: 1;
+  }
+  .stat-card.accent .stat-value { background: var(--grad); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+  .stat-delta { font-size: 11px; font-weight: 500; margin-top: 5px; }
+  .up { color: var(--green); }
+  .soft { color: var(--muted); }
+
+  /* ── Panels ── */
+  .panels { display: grid; grid-template-columns: 330px 1fr; gap: 14px; flex: 1; min-height: 0; }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    display: flex; flex-direction: column;
+    overflow: hidden; min-height: 0;
+  }
+
+  .panel-head {
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .panel-title { font-size: 12.5px; font-weight: 700; color: var(--text-bright); }
+  .panel-link { font-size: 11.5px; color: var(--teal); cursor: pointer; font-weight: 500; }
+
+  /* Tab row */
+  .tabs {
+    display: flex; border-bottom: 1px solid var(--border);
+    padding: 0 16px; flex-shrink: 0;
+  }
+  .tab {
+    padding: 9px 12px; font-size: 12px; font-weight: 600;
+    color: var(--muted); cursor: pointer;
+    border: none; background: none;
+    border-bottom: 2px solid transparent; margin-bottom: -1px;
+    transition: color 0.12s;
+  }
+  .tab.active { color: var(--teal); border-bottom-color: var(--teal); }
+  .tab:hover:not(.active) { color: var(--text); }
+
+  .panel-body {
+    padding: 14px 16px;
+    flex: 1; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .panel-body::-webkit-scrollbar { width: 4px; }
+  .panel-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  /* ── Form ── */
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field-label {
+    font-size: 10.5px; font-weight: 700;
+    color: var(--muted); text-transform: uppercase; letter-spacing: 0.07em;
+  }
+  .select-wrap { position: relative; }
+  .select-wrap::after {
+    content: '▾'; position: absolute; right: 11px; top: 50%; transform: translateY(-50%);
+    color: var(--muted); pointer-events: none; font-size: 11px;
+  }
+  select, input {
+    width: 100%;
+    background: var(--elevated);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 9px 12px;
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 12.5px;
+    appearance: none; outline: none;
+    transition: border-color 0.13s;
+  }
+  select { padding-right: 30px; }
+  select:focus, input:focus { border-color: var(--teal); }
+
+  .hr { height: 1px; background: var(--border); flex-shrink: 0; }
+
+  /* ── Slot pills ── */
+  .slot-item {
+    display: flex; align-items: center; gap: 9px;
+    background: var(--elevated);
+    border: 1px solid var(--border);
+    border-radius: 7px; padding: 8px 10px;
+    cursor: pointer; transition: all 0.12s;
+  }
+  .slot-item:hover { border-color: rgba(0,201,167,0.4); }
+  .slot-item.on { border-color: var(--teal); background: rgba(0,201,167,0.07); }
+
+  .slot-time {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px; font-weight: 500;
+    color: var(--text-bright); min-width: 88px;
+  }
+  .slot-prac { font-size: 12px; color: var(--text-soft); flex: 1; }
+
+  .chip {
+    padding: 2px 7px; border-radius: 4px;
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.03em;
+  }
+  .chip-teal { background: rgba(0,201,167,0.12); color: var(--teal); }
+  .chip-amber { background: rgba(255,185,0,0.1); color: #FFB900; }
+
+  .slot-check {
+    width: 16px; height: 16px; border-radius: 4px;
+    border: 1.5px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 9px; flex-shrink: 0; transition: all 0.12s;
+  }
+  .slot-item.on .slot-check {
+    background: var(--teal); border-color: var(--teal); color: var(--bg);
+  }
+
+  /* ── Right column ── */
+  .right-col { display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+
+  /* ── Patient matches ── */
+  .match-row {
+    display: flex; align-items: center; gap: 11px;
+    background: var(--elevated);
+    border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 13px;
+    cursor: pointer; transition: all 0.12s;
+  }
+  .match-row:hover { border-color: rgba(0,201,167,0.35); }
+  .match-row.queued {
+    border-color: rgba(0,201,167,0.25);
+    background: rgba(0,201,167,0.04);
+  }
+
+  .avatar {
+    width: 34px; height: 34px; border-radius: 8px;
+    background: var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11.5px; font-weight: 700; color: var(--text-soft);
+    flex-shrink: 0;
+  }
+  .match-row.queued .avatar {
+    background: rgba(0,201,167,0.15); color: var(--teal);
+  }
+
+  .match-info { flex: 1; min-width: 0; }
+  .match-name { font-size: 12.5px; font-weight: 600; color: var(--text-bright); }
+  .match-meta { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+  .score-col { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+  .score-track { width: 52px; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .score-fill { height: 100%; background: var(--grad); border-radius: 2px; }
+  .score-num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px; color: var(--muted);
+  }
+
+  .act-btn {
+    padding: 5px 10px; border-radius: 5px;
+    font-size: 11px; font-weight: 700;
+    cursor: pointer; border: none;
+    background: rgba(0,201,167,0.1); color: var(--teal);
+    transition: background 0.12s;
+    white-space: nowrap;
+  }
+  .act-btn:hover { background: rgba(0,201,167,0.2); }
+  .match-row.queued .act-btn {
+    background: rgba(0,245,160,0.08); color: var(--green);
+  }
+
+  /* ── Composer ── */
+  .composer {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden; flex-shrink: 0;
+  }
+  .composer-head {
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .composer-title { font-size: 12.5px; font-weight: 700; color: var(--text-bright); }
+  .composer-meta { font-size: 11px; color: var(--muted); }
+
+  .composer-inner { padding: 12px 16px; display: flex; gap: 10px; }
+
+  textarea {
+    flex: 1;
+    background: var(--elevated);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 10px 13px;
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 12.5px;
+    line-height: 1.6;
+    resize: none; height: 72px; outline: none;
+    transition: border-color 0.13s;
+  }
+  textarea:focus { border-color: var(--teal); }
+
+  .composer-foot {
+    padding: 0 16px 11px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .composer-tools { display: flex; gap: 6px; }
+  .tool-btn {
+    padding: 4px 10px; border-radius: 5px;
+    font-size: 11px; font-weight: 600;
+    cursor: pointer;
+    background: transparent; color: var(--text-soft);
+    border: 1px solid var(--border);
+    transition: all 0.12s;
+  }
+  .tool-btn:hover { border-color: var(--teal); color: var(--teal); }
+  .char-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; color: var(--muted);
+  }
+
+  /* ── Send bar ── */
+  .sendbar {
+    padding: 13px 26px;
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    display: flex; align-items: center; justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .send-summary { font-size: 12.5px; color: var(--muted); }
+  .send-summary strong { color: var(--text); }
+  .send-actions { display: flex; gap: 8px; align-items: center; }
+
+  .send-btn {
+    padding: 10px 26px; border-radius: 8px;
+    font-size: 14px; font-weight: 800;
+    cursor: pointer; border: none;
+    background: var(--grad); color: var(--bg);
+    display: flex; align-items: center; gap: 8px;
+    transition: all 0.13s;
+    letter-spacing: -0.2px;
+  }
+  .send-btn:hover { opacity: 0.92; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,201,167,0.4); }
+  .send-btn:active { transform: translateY(0); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <!-- Logo mark: simplified V + bars using SVG gradient matching brand -->
+      <svg class="logo-icon" viewBox="0 0 28 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="g" x1="0" y1="28" x2="14" y2="0" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#00C9A7"/>
+            <stop offset="100%" stop-color="#00F5A0"/>
+          </linearGradient>
+        </defs>
+        <!-- Left wing of V -->
+        <path d="M2 6 L10 22 L14 14 L10 6 Z" fill="url(#g)" opacity="0.7"/>
+        <!-- Right bar (tall) -->
+        <rect x="16" y="4" width="5" height="18" rx="1.5" fill="url(#g)"/>
+        <!-- Middle bar (medium) -->
+        <rect x="11" y="9" width="4" height="13" rx="1" fill="url(#g)" opacity="0.85"/>
+      </svg>
+      <span class="logo-wordmark">volumiser</span>
+    </div>
+
+    <div class="sidebar-ticker">
+      <div class="ticker-dot"></div>
+      <span class="ticker-text">↑ 3 slots filled this week</span>
+    </div>
+
+    <nav class="nav">
+      <div class="nav-label">Core</div>
+      <button class="nav-item active">
+        <span class="nav-icon">⚡</span>
+        Gap Filler
+        <span class="nav-badge">5</span>
+      </button>
+      <button class="nav-item">
+        <span class="nav-icon">📤</span>
+        Send History
+      </button>
+
+      <div class="nav-label">Intelligence</div>
+      <button class="nav-item">
+        <span class="nav-icon">🕐</span>
+        Send Timing
+      </button>
+      <button class="nav-item">
+        <span class="nav-icon">✦</span>
+        AI Compose
+        <span class="nav-badge-pill">Pro</span>
+      </button>
+
+      <div class="nav-label">Settings</div>
+      <button class="nav-item">
+        <span class="nav-icon">📋</span>
+        Templates
+      </button>
+      <button class="nav-item">
+        <span class="nav-icon">⚙</span>
+        Preferences
+      </button>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="clinic-pill">
+        <div class="clinic-avatar">GV</div>
+        <div>
+          <div class="clinic-name">Greenvale</div>
+          <div class="clinic-sub">Switch clinic</div>
+        </div>
+        <span class="clinic-chevron">⌄</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+
+    <div class="topbar">
+      <div>
+        <div class="page-heading">Gap Filler</div>
+        <div class="page-sub">Find open slots · match patients · send</div>
+      </div>
+      <div class="topbar-right">
+        <div class="timing-pill">✦ Best send: Sun 6–8pm</div>
+        <button class="btn btn-ghost">⟳ Refresh</button>
+        <button class="btn btn-primary">↗ New Campaign</button>
+      </div>
+    </div>
+
+    <div class="content">
+
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat-card accent">
+          <div class="stat-label">Open Slots</div>
+          <div class="stat-value">5</div>
+          <div class="stat-delta up">↑ next 7 days</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Matched Patients</div>
+          <div class="stat-value">18</div>
+          <div class="stat-delta soft">ready to contact</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Sent This Month</div>
+          <div class="stat-value">34</div>
+          <div class="stat-delta up">↑ 12 vs last month</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Revenue Recovered</div>
+          <div class="stat-value">$940</div>
+          <div class="stat-delta up">↑ $470 this week</div>
+        </div>
+      </div>
+
+      <!-- Two panels -->
+      <div class="panels">
+
+        <!-- Left: Slot selector -->
+        <div class="panel">
+          <div class="panel-head">
+            <span class="panel-title">Open Slots</span>
+            <span class="panel-link">Filter ▾</span>
+          </div>
+
+          <div class="tabs">
+            <button class="tab active">All</button>
+            <button class="tab">Shannon</button>
+            <button class="tab">Matt</button>
+            <button class="tab">Laura</button>
+          </div>
+
+          <div class="panel-body">
+            <div class="field">
+              <div class="field-label">Week</div>
+              <div class="select-wrap">
+                <select>
+                  <option>Mon 16 Jun – Sun 22 Jun</option>
+                  <option>Mon 23 Jun – Sun 29 Jun</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="hr"></div>
+
+            <div class="slot-item on">
+              <div class="slot-time">Mon 9:00am</div>
+              <div class="slot-prac">Shannon Walsh</div>
+              <span class="chip chip-teal">30m</span>
+              <div class="slot-check">✓</div>
+            </div>
+
+            <div class="slot-item on">
+              <div class="slot-time">Mon 2:00pm</div>
+              <div class="slot-prac">Matt Spencer</div>
+              <span class="chip chip-teal">60m</span>
+              <div class="slot-check">✓</div>
+            </div>
+
+            <div class="slot-item">
+              <div class="slot-time">Tue 10:30am</div>
+              <div class="slot-prac">Shannon Walsh</div>
+              <span class="chip chip-teal">30m</span>
+              <div class="slot-check"></div>
+            </div>
+
+            <div class="slot-item">
+              <div class="slot-time">Wed 11:00am</div>
+              <div class="slot-prac">Laura Addinsall</div>
+              <span class="chip chip-amber">60m</span>
+              <div class="slot-check"></div>
+            </div>
+
+            <div class="slot-item">
+              <div class="slot-time">Thu 4:00pm</div>
+              <div class="slot-prac">Matt Spencer</div>
+              <span class="chip chip-teal">30m</span>
+              <div class="slot-check"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Matches + Composer -->
+        <div class="right-col">
+
+          <div class="panel" style="flex:1">
+            <div class="panel-head">
+              <span class="panel-title">Matched Patients <span style="color:var(--muted);font-weight:400;font-size:12px">— 2 slots selected</span></span>
+              <span class="panel-link">Select all</span>
+            </div>
+            <div class="tabs">
+              <button class="tab active">Best match</button>
+              <button class="tab">All eligible</button>
+              <button class="tab">Queued (3)</button>
+            </div>
+            <div class="panel-body" style="gap:7px">
+
+              <div class="match-row queued">
+                <div class="avatar">JT</div>
+                <div class="match-info">
+                  <div class="match-name">James T.</div>
+                  <div class="match-meta">Mon 9am · 4 bookings at this time · 3 wks ago</div>
+                </div>
+                <div class="score-col">
+                  <div class="score-track"><div class="score-fill" style="width:92%"></div></div>
+                  <div class="score-num">92%</div>
+                </div>
+                <button class="act-btn">Queued ✓</button>
+              </div>
+
+              <div class="match-row queued">
+                <div class="avatar">SR</div>
+                <div class="match-info">
+                  <div class="match-name">Sarah R.</div>
+                  <div class="match-meta">Mon 9am · 2 bookings · 6 wks ago</div>
+                </div>
+                <div class="score-col">
+                  <div class="score-track"><div class="score-fill" style="width:78%"></div></div>
+                  <div class="score-num">78%</div>
+                </div>
+                <button class="act-btn">Queued ✓</button>
+              </div>
+
+              <div class="match-row queued">
+                <div class="avatar">ML</div>
+                <div class="match-info">
+                  <div class="match-name">Mark L.</div>
+                  <div class="match-meta">Mon 2pm · 3 bookings · 5 wks ago</div>
+                </div>
+                <div class="score-col">
+                  <div class="score-track"><div class="score-fill" style="width:71%"></div></div>
+                  <div class="score-num">71%</div>
+                </div>
+                <button class="act-btn">Queued ✓</button>
+              </div>
+
+              <div class="match-row">
+                <div class="avatar">AP</div>
+                <div class="match-info">
+                  <div class="match-name">Anna P.</div>
+                  <div class="match-meta">Mon 9am · 1 booking · 9 wks ago</div>
+                </div>
+                <div class="score-col">
+                  <div class="score-track"><div class="score-fill" style="width:55%"></div></div>
+                  <div class="score-num">55%</div>
+                </div>
+                <button class="act-btn">+ Queue</button>
+              </div>
+
+              <div class="match-row">
+                <div class="avatar">DC</div>
+                <div class="match-info">
+                  <div class="match-name">David C.</div>
+                  <div class="match-meta">Mon 2pm · 1 booking · 11 wks ago</div>
+                </div>
+                <div class="score-col">
+                  <div class="score-track"><div class="score-fill" style="width:48%"></div></div>
+                  <div class="score-num">48%</div>
+                </div>
+                <button class="act-btn">+ Queue</button>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Composer -->
+          <div class="composer">
+            <div class="composer-head">
+              <span class="composer-title">Message</span>
+              <div style="display:flex;align-items:center;gap:8px">
+                <span class="chip chip-teal">SMS</span>
+                <span class="composer-meta">3 recipients · est. $0.18</span>
+              </div>
+            </div>
+            <div class="composer-inner">
+              <textarea>Hi {first_name}, we have a spot available Mon {date} at {time} with Shannon. Want to book in? Reply YES or book here: vlm.link/xK3p</textarea>
+            </div>
+            <div class="composer-foot">
+              <div class="composer-tools">
+                <button class="tool-btn">✦ AI rewrite</button>
+                <button class="tool-btn">Templates</button>
+              </div>
+              <span class="char-count">142 / 160 · 1 SMS</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- Send bar -->
+    <div class="sendbar">
+      <div class="send-summary">
+        <strong>3 patients</strong> queued · <strong>2 slots</strong> · Greenvale · SMS
+      </div>
+      <div class="send-actions">
+        <button class="btn btn-ghost">Schedule ▾</button>
+        <button class="send-btn">Send now ↗</button>
+      </div>
+    </div>
+
+  </main>
+</div>
+</body>
+</html>
