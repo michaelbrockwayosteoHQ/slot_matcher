@@ -808,27 +808,62 @@ async function loadGaps() {
 
     statusEl.textContent = 'Loading working hours...';
     clinikoAvailabilities = [];
-    // Load availabilities per business — this gives us correct prac→clinic associations
+
+    // Build a name lookup from this week's actual appointments — these IDs are reliable
+    var apptPracIdToName = {};
+    var apptPracNameToId = {};
+    allAppts.forEach(function(a) {
+      if (!a.practitioner) return;
+      var pid = a.practitioner.links.self.split('/').pop();
+      var name = a.patient_name; // not useful — use pracIdToName
+      var pname = pracIdToName[pid];
+      if (pid && pname) {
+        apptPracIdToName[pid] = pname;
+        apptPracNameToId[pname] = pid;
+      }
+    });
+
+    // Load availabilities per business
     var bizIds = Object.keys(bizIdToName);
     for (var bi = 0; bi < bizIds.length; bi++) {
       var bizId = bizIds[bi];
       var availData = await clinikoGet('businesses/' + bizId + '/daily_availabilities');
       if (availData && availData.daily_availabilities) {
         availData.daily_availabilities.forEach(function(da) {
-          // Extract prac ID from the practitioner link in the availability record
-          var pracId = da.practitioner && da.practitioner.links && da.practitioner.links.self
-            ? da.practitioner.links.self.split('/').pop()
-            : null;
-          if (!pracId) return;
+          var availPracId = da.practitioner && da.practitioner.links && da.practitioner.links.self
+            ? da.practitioner.links.self.split('/').pop() : null;
+          if (!availPracId) return;
+          // Try to resolve name — first from pracIdToName (practitioners endpoint),
+          // then accept the availPracId as-is if name not found
+          var pracName = pracIdToName[availPracId] || '';
+          // If not found, this availability's prac ID is from a different namespace —
+          // store both so bookedByNameDate can still match if name resolves later
           clinikoAvailabilities.push({
-            pracId: pracId,
-            pracName: pracIdToName[pracId] || '',
+            pracId: availPracId,
+            pracName: pracName,
             bizId: bizId,
             bizName: bizIdToName[bizId] || '',
             dayOfWeek: da.day_of_week,
             availabilities: da.availabilities || []
           });
         });
+      }
+    }
+
+    // After loading, try to resolve any empty pracNames by fetching the practitioner directly
+    for (var ai = 0; ai < clinikoAvailabilities.length; ai++) {
+      var avail = clinikoAvailabilities[ai];
+      if (avail.pracName) continue; // already resolved
+      // Fetch practitioner record to get their name
+      var pracResp = await clinikoGet('practitioners/' + avail.pracId);
+      if (pracResp && pracResp.first_name) {
+        var resolvedName = pracResp.first_name + ' ' + pracResp.last_name;
+        // Update all entries with this pracId
+        clinikoAvailabilities.forEach(function(a) {
+          if (a.pracId === avail.pracId) a.pracName = resolvedName;
+        });
+        // Also add to pracIdToName so bookedByNameDate can use it
+        pracIdToName[avail.pracId] = resolvedName;
       }
     }
 
