@@ -856,6 +856,7 @@ async function loadGaps() {
       if (histData.individual_appointments.length < 100) break;
       histPage++;
     }
+    console.log('[BIZ] pracNameToBiz:', JSON.stringify(pracNameToBiz));
 
     // Expand availabilities: one entry per prac+clinic combo
     var expandedAvailabilities = [];
