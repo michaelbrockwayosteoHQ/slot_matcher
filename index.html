@@ -403,7 +403,13 @@ a:hover{color:var(--green)}
         <input type="password" id="clinikoKey" placeholder="base64(apikey:password)" style="font-family:'JetBrains Mono',monospace;font-size:13px;">
       </div>
       <button onclick="testCliniko()" class="btn-sm" style="margin-top:18px;white-space:nowrap;">Test connection</button>
-      <button onclick="loadGaps()" class="btn-sm" style="margin-top:18px;white-space:nowrap;background:var(--teal);color:#0D1117;border-color:var(--teal);font-weight:700;">Load this week's gaps</button>
+      <div style="margin-top:18px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div class="field" style="margin:0;">
+          <label>Week starting</label>
+          <input type="date" id="weekStartPicker" style="width:160px;font-size:13px;" onchange="clampWeekPicker()">
+        </div>
+        <button onclick="loadGaps()" class="btn-sm" style="margin-top:18px;white-space:nowrap;background:var(--teal);color:#0D1117;border-color:var(--teal);font-weight:700;">Load gaps</button>
+      </div>
       <div id="clinikoStatus" style="font-size:13px;padding-top:18px;font-family:'JetBrains Mono',monospace;"></div>
     </div>
   </div>
@@ -739,10 +745,18 @@ async function loadGaps() {
   statusEl.style.color = 'var(--muted)'; statusEl.textContent = 'Loading schedule and working hours...';
   try {
     var today = new Date();
-    var monday = new Date(today);
-    var dow = monday.getDay();
-    monday.setDate(monday.getDate() + (dow === 0 ? -6 : 1 - dow));
-    monday.setHours(0,0,0,0);
+
+    // Use picker value if set, otherwise default to current Monday
+    var pickerVal = document.getElementById('weekStartPicker').value;
+    var monday;
+    if (pickerVal) {
+      monday = new Date(pickerVal + 'T00:00:00');
+    } else {
+      monday = new Date(today);
+      var dow = monday.getDay();
+      monday.setDate(monday.getDate() + (dow === 0 ? -6 : 1 - dow));
+      monday.setHours(0,0,0,0);
+    }
     var sunday = new Date(monday); sunday.setDate(monday.getDate() + 6); sunday.setHours(23,59,59,0);
     var fmt = function(d) { return d.toISOString().split('.')[0] + 'Z'; };
 
@@ -816,6 +830,13 @@ async function loadGaps() {
       if (!bookedByPracDate[key]) bookedByPracDate[key] = [];
       bookedByPracDate[key].push({startMins:start.getHours()*60+start.getMinutes(), endMins:end.getHours()*60+end.getMinutes()});
     });
+
+    console.log('[GAPS] allAppts count:', allAppts.length);
+    console.log('[GAPS] bookedByPracDate keys:', Object.keys(bookedByPracDate));
+    console.log('[GAPS] clinikoAvailabilities count:', clinikoAvailabilities.length);
+    console.log('[GAPS] clinikoAvailabilities sample:', clinikoAvailabilities[0]);
+    console.log('[GAPS] pracIdToName:', pracIdToName);
+    console.log('[GAPS] bizIdToName:', bizIdToName);
 
     clinikoGaps = [];
     var dayNames = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
@@ -1009,10 +1030,25 @@ async function findPatientsFromAPI(day, blockKey, prac, selectedBiz) {
       if (!byPatient[pid]) byPatient[pid]={id:pid,name:a.patient_name||('Patient '+pid),email:'',dates:[]};
       byPatient[pid].dates.push(dateStr);
     });
+
+    console.log('[PATIENTS] allHistory count:', allHistory.length);
+    console.log('[PATIENTS] slotMatches count:', slotMatches.length);
+    console.log('[PATIENTS] byPatient count:', Object.keys(byPatient).length);
+    console.log('[PATIENTS] selectedBiz:', selectedBiz, 'prac:', prac);
+    console.log('[PATIENTS] targetDayNum:', targetDayNum, 'isExact:', isExact, 'exactMins:', exactMins);
+
     var bizData=await clinikoGet('businesses'); var bizIdMap={};
     if (bizData&&bizData.businesses) bizData.businesses.forEach(function(b) { bizIdMap[String(b.id)]=b.name; });
     var lastBizNameLookup={};
     Object.keys(lastBizLookup).forEach(function(pid) { lastBizNameLookup[pid]=bizIdMap[String(lastBizLookup[pid])]||''; });
+
+    console.log('[PATIENTS] bizIdMap:', bizIdMap);
+    // Sample a few lastBiz lookups
+    var samplePids = Object.keys(byPatient).slice(0,3);
+    samplePids.forEach(function(pid) {
+      console.log('[PATIENTS] pid:', pid, 'lastBizId:', lastBizLookup[pid], 'resolvedBiz:', lastBizNameLookup[pid], 'hasUpcoming:', !!hasUpcoming[pid], 'dates:', byPatient[pid].dates.length);
+    });
+
     var pracData=await clinikoGet('practitioners'); var pracIdMap={};
     if (pracData&&pracData.practitioners) pracData.practitioners.forEach(function(p) { pracIdMap[String(p.id)]=p.first_name+' '+p.last_name; });
     var lastPracNameLookup={};
@@ -1273,8 +1309,35 @@ function toggleTheme() {
   document.getElementById('btn-light').classList.toggle('active',isLight);
 }
 
+function clampWeekPicker() {
+  var picker = document.getElementById('weekStartPicker');
+  var today = new Date();
+  // Get today's Monday
+  var thisMon = new Date(today);
+  var dow = thisMon.getDay();
+  thisMon.setDate(thisMon.getDate() + (dow === 0 ? -6 : 1 - dow));
+  thisMon.setHours(0,0,0,0);
+  var minVal = thisMon.toISOString().slice(0,10);
+  // If selected date is before this Monday, reset to this Monday
+  if (picker.value && picker.value < minVal) {
+    picker.value = minVal;
+  }
+}
+
+function initWeekPicker() {
+  var picker = document.getElementById('weekStartPicker');
+  var today = new Date();
+  var monday = new Date(today);
+  var dow = monday.getDay();
+  monday.setDate(monday.getDate() + (dow === 0 ? -6 : 1 - dow));
+  monday.setHours(0,0,0,0);
+  var minVal = monday.toISOString().slice(0,10);
+  picker.value = minVal;
+  picker.min = minVal;
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', function() { renderTemplateManager(); renderBookingLinks(); });
+document.addEventListener('DOMContentLoaded', function() { renderTemplateManager(); renderBookingLinks(); initWeekPicker(); });
 </script>
 </body>
 </html>
