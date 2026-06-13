@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Volumiser</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root{
+  --bg:#0D1117;
+  --surface:#131B27;
+  --elevated:#1A2336;
+  --border:#1F2D42;
+  --teal:#00C9A7;
+  --green:#00F5A0;
+  --grad:linear-gradient(135deg,#00C9A7,#00F5A0);
+  --muted:#3D5068;
+  --text-soft:#7A8FA6;
+  --text:#C8D8E8;
+  --text-bright:#F0F6FF;
+  --warm:#FFB347;
+  --error:#FF4D6D;
+}
+
+:root.light{
+  --bg:#F2F6FA;
+  --surface:#FFFFFF;
+  --elevated:#EBF1F7;
+  --border:#D4E0EE;
+  --teal:#009E84;
+  --green:#00C97A;
+  --grad:linear-gradient(135deg,#009E84,#00C97A);
+  --muted:#8FA8BB;
+  --text-soft:#4A6070;
+  --text:#243040;
+  --text-bright:#0D1117;
+  --warm:#B87010;
+  --error:#C8283A;
+}
+
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;}
+
+/* ── Shell ── */
+.shell{display:flex;flex-direction:column;height:100dvh;max-width:430px;margin:0 auto;position:relative;overflow:hidden;}
+
+/* ── Top nav ── */
+.topnav{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 18px 12px;
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  flex-shrink:0;
+}
+.logo{display:flex;align-items:center;gap:8px;font-size:17px;font-weight:800;color:var(--text-bright);letter-spacing:-0.3px;}
+
+.theme-toggle{display:flex;align-items:center;background:var(--elevated);border:1px solid var(--border);border-radius:20px;padding:3px;gap:2px;}
+.ttbtn{width:28px;height:24px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:13px;border:none;background:none;cursor:pointer;color:var(--muted);}
+.ttbtn.active{background:var(--surface);color:var(--text-bright);box-shadow:0 1px 3px rgba(0,0,0,.25);}
+
+/* ── Tab bar ── */
+.tabbar{
+  display:flex;
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  flex-shrink:0;
+  padding:0 4px;
+}
+.tbtab{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:10px 4px 9px;font-size:10px;font-weight:600;
+  color:var(--muted);border:none;background:none;cursor:pointer;
+  border-bottom:2px solid transparent;margin-bottom:-1px;
+  transition:color .13s;letter-spacing:.03em;text-transform:uppercase;
+}
+.tbtab.active{color:var(--teal);border-bottom-color:var(--teal);}
+.tbtab-icon{font-size:18px;}
+
+/* ── Scrollable content ── */
+.screen{display:none;flex:1;overflow-y:auto;padding:16px;flex-direction:column;gap:14px;}
+.screen.active{display:flex;}
+.screen::-webkit-scrollbar{display:none;}
+
+/* ── Stats row ── */
+.stats-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.stat-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:14px 15px;
+}
+.stat-card.accent .stat-val{background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.stat-lbl{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:5px;}
+.stat-val{font-size:26px;font-weight:800;font-family:'JetBrains Mono',monospace;color:var(--text-bright);letter-spacing:-1px;line-height:1;}
+.stat-delta{font-size:11px;margin-top:4px;font-weight:500;}
+.up{color:var(--green);}
+.soft{color:var(--muted);}
+
+/* ── Live ticker ── */
+.ticker{
+  display:flex;align-items:center;gap:9px;
+  background:rgba(0,245,160,.07);
+  border:1px solid rgba(0,245,160,.18);
+  border-radius:8px;padding:11px 14px;
+}
+.tdot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 7px var(--green);flex-shrink:0;animation:glow 2s ease-in-out infinite;}
+@keyframes glow{0%,100%{opacity:1}50%{opacity:.4}}
+.ttext{font-size:13px;font-weight:600;color:var(--green);}
+
+/* ── Section header ── */
+.sec-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;}
+.sec-title{font-size:13px;font-weight:700;color:var(--text-bright);}
+.sec-link{font-size:12px;color:var(--teal);font-weight:500;}
+
+/* ── Slot cards ── */
+.slot-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:13px 14px;
+  display:flex;align-items:center;gap:12px;
+  transition:border-color .13s;
+}
+.slot-card.selected{border-color:var(--teal);background:rgba(0,201,167,.05);}
+.slot-check{
+  width:22px;height:22px;border-radius:6px;
+  border:1.5px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;flex-shrink:0;transition:all .13s;
+}
+.slot-card.selected .slot-check{background:var(--teal);border-color:var(--teal);color:#0D1117;font-weight:700;}
+.slot-info{flex:1;}
+.slot-time{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:500;color:var(--text-bright);}
+.slot-prac{font-size:12px;color:var(--text-soft);margin-top:2px;}
+.slot-chip{
+  padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.04em;flex-shrink:0;
+}
+.chip-teal{background:rgba(0,201,167,.12);color:var(--teal);}
+.chip-amber{background:rgba(255,179,71,.12);color:var(--warm);}
+
+/* ── Patient match cards ── */
+.match-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;overflow:hidden;transition:border-color .13s;
+}
+.match-card.queued{border-color:rgba(0,201,167,.3);background:rgba(0,201,167,.03);}
+.match-head{display:flex;align-items:center;gap:11px;padding:12px 14px;}
+.mavatar{
+  width:38px;height:38px;border-radius:9px;
+  background:rgba(0,201,167,.12);color:var(--teal);
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;font-weight:700;flex-shrink:0;
+}
+.match-card.queued .mavatar{background:rgba(0,245,160,.1);color:var(--green);}
+.mname{font-size:14px;font-weight:600;color:var(--text-bright);}
+.mmeta{font-size:11.5px;color:var(--muted);margin-top:2px;}
+.mscore-col{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:4px;}
+.mtrack{width:48px;height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
+.mfill{height:100%;background:var(--grad);border-radius:2px;}
+.mnum{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);}
+.maction{
+  margin:0 14px 12px auto;display:block;width:fit-content;
+  padding:6px 14px;border-radius:6px;font-size:12px;font-weight:700;
+  border:none;cursor:pointer;
+  background:rgba(0,201,167,.1);color:var(--teal);
+  transition:background .12s;
+}
+.match-card.queued .maction{background:rgba(0,245,160,.08);color:var(--green);}
+
+/* ── Composer ── */
+.composer{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;overflow:hidden;
+}
+.comp-head{
+  padding:11px 14px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.comp-title{font-size:13px;font-weight:700;color:var(--text-bright);}
+.comp-meta{font-size:11px;color:var(--muted);}
+.comp-body{padding:12px 14px;}
+.comp-textarea{
+  width:100%;background:var(--elevated);border:1px solid var(--border);
+  border-radius:7px;padding:11px 13px;color:var(--text);
+  font-family:'Inter',sans-serif;font-size:13px;line-height:1.6;
+  resize:none;height:80px;outline:none;
+  transition:border-color .13s;
+}
+.comp-textarea:focus{border-color:var(--teal);}
+.comp-foot{padding:0 14px 12px;display:flex;justify-content:space-between;align-items:center;}
+.comp-tools{display:flex;gap:6px;}
+.tool-btn{
+  padding:5px 11px;border-radius:5px;font-size:11.5px;font-weight:600;
+  cursor:pointer;background:transparent;color:var(--text-soft);
+  border:1px solid var(--border);transition:all .12s;font-family:'Inter',sans-serif;
+}
+.tool-btn:hover{border-color:var(--teal);color:var(--teal);}
+.char-ct{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);}
+
+/* ── Send button ── */
+.send-bar{
+  padding:14px 16px;
+  background:var(--surface);border-top:1px solid var(--border);
+  flex-shrink:0;
+}
+.send-summary{font-size:12px;color:var(--muted);margin-bottom:10px;}
+.send-summary strong{color:var(--text);}
+.send-btn{
+  width:100%;padding:15px;border-radius:10px;
+  font-size:16px;font-weight:800;
+  cursor:pointer;border:none;
+  background:var(--grad);color:#0D1117;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  transition:all .13s;letter-spacing:-0.2px;
+}
+.send-btn:active{opacity:.9;transform:scale(.98);}
+
+/* ── Timing screen ── */
+.timing-card{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:16px;
+}
+.timing-title{font-size:13px;font-weight:700;color:var(--text-bright);margin-bottom:12px;}
+.timing-row{
+  display:flex;align-items:center;gap:12px;
+  padding:10px 0;border-bottom:1px solid var(--border);
+}
+.timing-row:last-child{border-bottom:none;}
+.timing-rank{
+  width:24px;height:24px;border-radius:6px;
+  background:var(--elevated);display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;color:var(--muted);flex-shrink:0;
+}
+.timing-rank.top{background:rgba(0,201,167,.15);color:var(--teal);}
+.timing-label{flex:1;font-size:13px;color:var(--text);font-weight:500;}
+.timing-bar-wrap{width:80px;height:4px;background:var(--border);border-radius:2px;}
+.timing-bar{height:100%;background:var(--grad);border-radius:2px;}
+.timing-ct{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);min-width:32px;text-align:right;}
+
+.recommend-pill{
+  display:flex;align-items:center;gap:8px;
+  background:rgba(0,245,160,.07);border:1px solid rgba(0,245,160,.2);
+  border-radius:8px;padding:13px 14px;
+}
+.rpill-icon{font-size:20px;}
+.rpill-label{font-size:12px;font-weight:600;color:var(--green);}
+.rpill-sub{font-size:11px;color:var(--muted);margin-top:1px;}
+
+/* ── History screen ── */
+.history-item{
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:10px;padding:13px 14px;
+  display:flex;align-items:center;gap:12px;
+}
+.hist-avatar{
+  width:36px;height:36px;border-radius:8px;
+  background:rgba(0,201,167,.12);color:var(--teal);
+  display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:700;flex-shrink:0;
+}
+.hist-info{flex:1;}
+.hist-name{font-size:13px;font-weight:600;color:var(--text-bright);}
+.hist-meta{font-size:11.5px;color:var(--muted);margin-top:2px;}
+.hist-status{
+  padding:4px 9px;border-radius:5px;
+  font-size:10.5px;font-weight:700;flex-shrink:0;
+}
+.hs-sent{background:rgba(0,201,167,.1);color:var(--teal);}
+.hs-booked{background:rgba(0,245,160,.1);color:var(--green);}
+
+/* ── Empty/loading states ── */
+.empty{text-align:center;padding:40px 20px;color:var(--muted);}
+.empty-icon{font-size:32px;margin-bottom:10px;opacity:.4;}
+.empty-text{font-size:13px;}
+
+/* ── Heatmap ── */
+.heatmap-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+.hm-label{font-size:9px;color:var(--muted);text-align:center;padding-bottom:4px;font-weight:600;}
+.hm-cell{
+  aspect-ratio:1;border-radius:4px;background:var(--elevated);
+  transition:background .2s;
+}
+.hm-0{background:var(--elevated);}
+.hm-1{background:rgba(0,201,167,.2);}
+.hm-2{background:rgba(0,201,167,.4);}
+.hm-3{background:rgba(0,201,167,.65);}
+.hm-4{background:var(--teal);}
+
+/* ── Badges / chips ── */
+.badge-pill{
+  display:inline-flex;align-items:center;gap:5px;
+  background:rgba(0,201,167,.1);border:1px solid rgba(0,201,167,.2);
+  border-radius:5px;padding:4px 10px;
+  font-size:11.5px;font-weight:600;color:var(--teal);
+}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- Top nav -->
+  <div class="topnav">
+    <div class="logo">
+      <svg width="22" height="22" viewBox="0 0 28 28" fill="none">
+        <defs>
+          <linearGradient id="g" x1="0" y1="28" x2="14" y2="0" gradientUnits="userSpaceOnUse">
+            <stop offset="0%" stop-color="#00C9A7"/>
+            <stop offset="100%" stop-color="#00F5A0"/>
+          </linearGradient>
+        </defs>
+        <path d="M2 6 L10 22 L14 14 L10 6 Z" fill="url(#g)" opacity="0.7"/>
+        <rect x="16" y="4" width="5" height="18" rx="1.5" fill="url(#g)"/>
+        <rect x="11" y="9" width="4" height="13" rx="1" fill="url(#g)" opacity="0.85"/>
+      </svg>
+      volumiser
+    </div>
+    <div class="theme-toggle">
+      <button class="ttbtn" id="btn-dark" onclick="toggleTheme()">🌙</button>
+      <button class="ttbtn active" id="btn-light" onclick="toggleTheme()">☀️</button>
+    </div>
+  </div>
+
+  <!-- Tab bar -->
+  <div class="tabbar">
+    <button class="tbtab active" onclick="showTab('gaps',this)">
+      <span class="tbtab-icon">⚡</span>Gap Filler
+    </button>
+    <button class="tbtab" onclick="showTab('timing',this)">
+      <span class="tbtab-icon">🕐</span>Timing
+    </button>
+    <button class="tbtab" onclick="showTab('history',this)">
+      <span class="tbtab-icon">📤</span>History
+    </button>
+  </div>
+
+  <!-- ── GAP FILLER SCREEN ── -->
+  <div class="screen active" id="screen-gaps">
+
+    <!-- Ticker -->
+    <div class="ticker">
+      <div class="tdot"></div>
+      <span class="ttext">↑ 3 slots filled this week · $940 recovered</span>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-row">
+      <div class="stat-card accent">
+        <div class="stat-lbl">Open Slots</div>
+        <div class="stat-val">5</div>
+        <div class="stat-delta up">↑ next 7 days</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-lbl">Matched</div>
+        <div class="stat-val">18</div>
+        <div class="stat-delta soft">patients ready</div>
+      </div>
+    </div>
+
+    <!-- Slots -->
+    <div>
+      <div class="sec-head">
+        <span class="sec-title">Open Slots — Greenvale</span>
+        <span class="sec-link">Filter ▾</span>
+      </div>
+    </div>
+
+    <div class="slot-card selected">
+      <div class="slot-check">✓</div>
+      <div class="slot-info">
+        <div class="slot-time">Mon 9:00am</div>
+        <div class="slot-prac">Shannon Walsh</div>
+      </div>
+      <span class="slot-chip chip-teal">30m</span>
+    </div>
+
+    <div class="slot-card selected">
+      <div class="slot-check">✓</div>
+      <div class="slot-info">
+        <div class="slot-time">Mon 2:00pm</div>
+        <div class="slot-prac">Matt Spencer</div>
+      </div>
+      <span class="slot-chip chip-teal">60m</span>
+    </div>
+
+    <div class="slot-card">
+      <div class="slot-check"></div>
+      <div class="slot-info">
+        <div class="slot-time">Tue 10:30am</div>
+        <div class="slot-prac">Shannon Walsh</div>
+      </div>
+      <span class="slot-chip chip-teal">30m</span>
+    </div>
+
+    <div class="slot-card">
+      <div class="slot-check"></div>
+      <div class="slot-info">
+        <div class="slot-time">Wed 11:00am</div>
+        <div class="slot-prac">Laura Addinsall</div>
+      </div>
+      <span class="slot-chip chip-amber">60m</span>
+    </div>
+
+    <!-- Matched patients -->
+    <div>
+      <div class="sec-head">
+        <span class="sec-title">Matched Patients</span>
+        <span class="sec-link">Select all</span>
+      </div>
+    </div>
+
+    <div class="match-card queued">
+      <div class="match-head">
+        <div class="mavatar">JT</div>
+        <div>
+          <div class="mname">James T.</div>
+          <div class="mmeta">Mon 9am · 4 bookings · 3 wks ago</div>
+        </div>
+        <div class="mscore-col">
+          <div class="mtrack"><div class="mfill" style="width:92%"></div></div>
+          <div class="mnum">92%</div>
+        </div>
+      </div>
+      <button class="maction">Queued ✓</button>
+    </div>
+
+    <div class="match-card queued">
+      <div class="match-head">
+        <div class="mavatar">SR</div>
+        <div>
+          <div class="mname">Sarah R.</div>
+          <div class="mmeta">Mon 9am · 2 bookings · 6 wks ago</div>
+        </div>
+        <div class="mscore-col">
+          <div class="mtrack"><div class="mfill" style="width:78%"></div></div>
+          <div class="mnum">78%</div>
+        </div>
+      </div>
+      <button class="maction">Queued ✓</button>
+    </div>
+
+    <div class="match-card queued">
+      <div class="match-head">
+        <div class="mavatar">ML</div>
+        <div>
+          <div class="mname">Mark L.</div>
+          <div class="mmeta">Mon 2pm · 3 bookings · 5 wks ago</div>
+        </div>
+        <div class="mscore-col">
+          <div class="mtrack"><div class="mfill" style="width:71%"></div></div>
+          <div class="mnum">71%</div>
+        </div>
+      </div>
+      <button class="maction">Queued ✓</button>
+    </div>
+
+    <div class="match-card">
+      <div class="match-head">
+        <div class="mavatar">AP</div>
+        <div>
+          <div class="mname">Anna P.</div>
+          <div class="mmeta">Mon 9am · 1 booking · 9 wks ago</div>
+        </div>
+        <div class="mscore-col">
+          <div class="mtrack"><div class="mfill" style="width:55%"></div></div>
+          <div class="mnum">55%</div>
+        </div>
+      </div>
+      <button class="maction" style="background:rgba(0,201,167,.07)">+ Queue</button>
+    </div>
+
+    <!-- Composer -->
+    <div class="composer">
+      <div class="comp-head">
+        <span class="comp-title">Message</span>
+        <div style="display:flex;align-items:center;gap:7px">
+          <span class="slot-chip chip-teal" style="padding:3px 8px">SMS</span>
+          <span class="comp-meta">3 recipients · $0.18</span>
+        </div>
+      </div>
+      <div class="comp-body">
+        <textarea class="comp-textarea">Hi {first_name}, we have a spot Mon {date} at {time} with Shannon. Want to book? Reply YES or: vlm.link/xK3p</textarea>
+      </div>
+      <div class="comp-foot">
+        <div class="comp-tools">
+          <button class="tool-btn">✦ AI</button>
+          <button class="tool-btn">Templates</button>
+        </div>
+        <span class="char-ct">128/160</span>
+      </div>
+    </div>
+
+    <!-- Spacer so send bar doesn't cover content -->
+    <div style="height:8px;flex-shrink:0"></div>
+
+  </div><!-- end gaps screen -->
+
+  <!-- ── SEND TIMING SCREEN ── -->
+  <div class="screen" id="screen-timing">
+
+    <div class="recommend-pill">
+      <span class="rpill-icon">✦</span>
+      <div>
+        <div class="rpill-label">Best time to send: Sun 6–8pm</div>
+        <div class="rpill-sub">Based on 847 online bookings · last 12 months</div>
+      </div>
+    </div>
+
+    <!-- Heatmap -->
+    <div class="timing-card">
+      <div class="timing-title">Online Booking Heatmap</div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:5px;">
+        <div class="hm-label">MON</div>
+        <div class="hm-label">TUE</div>
+        <div class="hm-label">WED</div>
+        <div class="hm-label">THU</div>
+        <div class="hm-label">FRI</div>
+        <div class="hm-label">SAT</div>
+        <div class="hm-label">SUN</div>
+      </div>
+      <!-- 5 rows × 7 cols = morning to evening -->
+      <div class="heatmap-grid">
+        <!-- 8am -->
+        <div class="hm-cell hm-1"></div><div class="hm-cell hm-2"></div><div class="hm-cell hm-1"></div><div class="hm-cell hm-2"></div><div class="hm-cell hm-1"></div><div class="hm-cell hm-0"></div><div class="hm-cell hm-0"></div>
+        <!-- 10am -->
+        <div class="hm-cell hm-2"></div><div class="hm-cell hm-4"></div><div class="hm-cell hm-3"></div><div class="hm-cell hm-3"></div><div class="hm-cell hm-2"></div><div class="hm-cell hm-1"></div><div class="hm-cell hm-1"></div>
+        <!-- 12pm -->
+        <div class="hm-cell hm-1"></div><div class="hm-cell hm-2"></div><div class="hm-cell hm-2"></div><div class="hm-cell hm-2"></div><div class="hm-cell hm-1"></div><div class="hm-cell hm-2"></div><div class="hm-cell hm-2"></div>
+        <!-- 5pm -->
+        <div class="hm-cell hm-2"></div><div class="hm-cell hm-3"></div><div class="hm-cell hm-2"></div><div class="hm-cell hm-4"></div><div class="hm-cell hm-2"></div><div class="hm-cell hm-3"></div><div class="hm-cell hm-2"></div>
+        <!-- 7pm -->
+        <div class="hm-cell hm-3"></div><div class="hm-cell hm-2"></div><div class="hm-cell hm-2"></div><div class="hm-cell hm-2"></div><div class="hm-cell hm-1"></div><div class="hm-cell hm-3"></div><div class="hm-cell hm-4"></div>
+      </div>
+    </div>
+
+    <!-- Top windows -->
+    <div class="timing-card">
+      <div class="timing-title">Top Send Windows</div>
+      <div class="timing-row">
+        <div class="timing-rank top">1</div>
+        <div class="timing-label">Sunday 6–8pm</div>
+        <div class="timing-bar-wrap"><div class="timing-bar" style="width:100%"></div></div>
+        <div class="timing-ct">143</div>
+      </div>
+      <div class="timing-row">
+        <div class="timing-rank top">2</div>
+        <div class="timing-label">Tuesday 10–11am</div>
+        <div class="timing-bar-wrap"><div class="timing-bar" style="width:82%"></div></div>
+        <div class="timing-ct">117</div>
+      </div>
+      <div class="timing-row">
+        <div class="timing-rank top">3</div>
+        <div class="timing-label">Thursday 5–6pm</div>
+        <div class="timing-bar-wrap"><div class="timing-bar" style="width:74%"></div></div>
+        <div class="timing-ct">106</div>
+      </div>
+      <div class="timing-row">
+        <div class="timing-rank">4</div>
+        <div class="timing-label">Wednesday 10am</div>
+        <div class="timing-bar-wrap"><div class="timing-bar" style="width:61%"></div></div>
+        <div class="timing-ct">87</div>
+      </div>
+      <div class="timing-row">
+        <div class="timing-rank">5</div>
+        <div class="timing-label">Saturday 7–8pm</div>
+        <div class="timing-bar-wrap"><div class="timing-bar" style="width:53%"></div></div>
+        <div class="timing-ct">76</div>
+      </div>
+    </div>
+
+    <div style="height:8px;flex-shrink:0"></div>
+  </div><!-- end timing screen -->
+
+  <!-- ── HISTORY SCREEN ── -->
+  <div class="screen" id="screen-history">
+
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-lbl">Sent (30d)</div>
+        <div class="stat-val">34</div>
+        <div class="stat-delta up">↑ 12 vs prior</div>
+      </div>
+      <div class="stat-card accent">
+        <div class="stat-lbl">Recovered</div>
+        <div class="stat-val">$940</div>
+        <div class="stat-delta up">16.7% conv.</div>
+      </div>
+    </div>
+
+    <div class="sec-head">
+      <span class="sec-title">Recent Sends</span>
+      <span class="sec-link">Export</span>
+    </div>
+
+    <div class="history-item">
+      <div class="hist-avatar">JT</div>
+      <div class="hist-info">
+        <div class="hist-name">James T.</div>
+        <div class="hist-meta">Mon 9am · Shannon · SMS · 2h ago</div>
+      </div>
+      <span class="hist-status hs-booked">Booked ✓</span>
+    </div>
+
+    <div class="history-item">
+      <div class="hist-avatar">SR</div>
+      <div class="hist-info">
+        <div class="hist-name">Sarah R.</div>
+        <div class="hist-meta">Mon 9am · Shannon · SMS · 2h ago</div>
+      </div>
+      <span class="hist-status hs-sent">Sent</span>
+    </div>
+
+    <div class="history-item">
+      <div class="hist-avatar">ML</div>
+      <div class="hist-info">
+        <div class="hist-name">Mark L.</div>
+        <div class="hist-meta">Mon 2pm · Matt · SMS · 2h ago</div>
+      </div>
+      <span class="hist-status hs-booked">Booked ✓</span>
+    </div>
+
+    <div class="history-item">
+      <div class="hist-avatar">DC</div>
+      <div class="hist-info">
+        <div class="hist-name">David C.</div>
+        <div class="hist-meta">Thu 4pm · Matt · SMS · Sun 7pm</div>
+      </div>
+      <span class="hist-status hs-sent">Sent</span>
+    </div>
+
+    <div class="history-item">
+      <div class="hist-avatar">AP</div>
+      <div class="hist-info">
+        <div class="hist-name">Anna P.</div>
+        <div class="hist-meta">Tue 10:30am · Shannon · SMS · Sun 7pm</div>
+      </div>
+      <span class="hist-status hs-booked">Booked ✓</span>
+    </div>
+
+    <div style="height:8px;flex-shrink:0"></div>
+  </div><!-- end history screen -->
+
+  <!-- Send bar (only shows on gaps screen) -->
+  <div class="send-bar" id="sendBar">
+    <div class="send-summary">
+      <strong>3 patients</strong> queued · <strong>2 slots</strong> · Greenvale · SMS
+    </div>
+    <button class="send-btn">Send now ↗</button>
+  </div>
+
+</div><!-- end shell -->
+
+<script>
+function showTab(id, btn) {
+  document.querySelectorAll('.screen').forEach(function(s) { s.classList.remove('active'); });
+  document.querySelectorAll('.tbtab').forEach(function(t) { t.classList.remove('active'); });
+  document.getElementById('screen-' + id).classList.add('active');
+  btn.classList.add('active');
+  document.getElementById('sendBar').style.display = id === 'gaps' ? 'block' : 'none';
+}
+
+function toggleTheme() {
+  var isLight = document.documentElement.classList.toggle('light');
+  document.getElementById('btn-dark').classList.toggle('active', !isLight);
+  document.getElementById('btn-light').classList.toggle('active', isLight);
+}
+
+// Slot tap to toggle selected
+document.querySelectorAll('.slot-card').forEach(function(card) {
+  card.addEventListener('click', function() {
+    card.classList.toggle('selected');
+    var check = card.querySelector('.slot-check');
+    check.textContent = card.classList.contains('selected') ? '✓' : '';
+  });
+});
+
+// Queue tap
+document.querySelectorAll('.maction').forEach(function(btn) {
+  btn.addEventListener('click', function(e) {
+    e.stopPropagation();
+    var card = btn.closest('.match-card');
+    card.classList.toggle('queued');
+    btn.textContent = card.classList.contains('queued') ? 'Queued ✓' : '+ Queue';
+  });
+});
+</script>
+</body>
+</html>
