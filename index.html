@@ -794,6 +794,26 @@ async function loadGaps() {
       });
     }
 
+    // Build prac→clinic map using businesses/:id/practitioners — most reliable source
+    statusEl.textContent = 'Mapping practitioners to clinics...';
+    var pracNameToBiz = {};
+    var bizIds = Object.keys(bizIdToName);
+    for (var bi2 = 0; bi2 < bizIds.length; bi2++) {
+      var bid2 = bizIds[bi2];
+      var bname2 = bizIdToName[bid2];
+      var bizPracData = await clinikoGet('businesses/' + bid2 + '/practitioners');
+      if (bizPracData && bizPracData.practitioners) {
+        bizPracData.practitioners.forEach(function(p) {
+          var pid = p.links && p.links.self ? p.links.self.split('/').pop() : String(p.id);
+          var pname = pracIdToName[pid] || (p.first_name + ' ' + p.last_name);
+          if (!pname.trim()) return;
+          if (!pracNameToBiz[pname]) pracNameToBiz[pname] = [];
+          if (pracNameToBiz[pname].indexOf(bname2) === -1) pracNameToBiz[pname].push(bname2);
+        });
+      }
+    }
+    console.log('[BIZ] pracNameToBiz:', JSON.stringify(pracNameToBiz));
+
     statusEl.textContent = 'Loading this week\'s appointments...';
     var allAppts = []; var page = 1;
     while (true) {
@@ -830,40 +850,6 @@ async function loadGaps() {
         });
       }
     }
-
-    // Build prac→clinic map from 5 years of appointment history — only reliable source
-    statusEl.textContent = 'Mapping practitioners to clinics...';
-    var fiveYearsAgo = new Date(today); fiveYearsAgo.setFullYear(today.getFullYear() - 5);
-    var pracNameToBiz = {};
-    var histPage = 1;
-    while (histPage <= 50) {
-      var histParams = 'q[]=' + encodeURIComponent('starts_at:>' + fmt(fiveYearsAgo)) +
-                       '&q[]=' + encodeURIComponent('starts_at:<' + fmt(today)) +
-                       '&sort=starts_at&order=desc&per_page=100&page=' + histPage;
-      var histData = await clinikoGet('individual_appointments', histParams);
-      if (!histData || !histData.individual_appointments || !histData.individual_appointments.length) break;
-      histData.individual_appointments.forEach(function(a) {
-        if (a.cancelled_at || a.deleted_at) return;
-        var pid = a.practitioner ? a.practitioner.links.self.split('/').pop() : null;
-        if (!pid) return;
-        var pname = pracIdToName[pid] || '';
-        var bid = a.business ? a.business.links.self.split('/').pop() : '';
-        var bname = bizIdToName[bid] || '';
-        if (!pname || !bname) return;
-        if (!pracNameToBiz[pname]) pracNameToBiz[pname] = [];
-        if (pracNameToBiz[pname].indexOf(bname) === -1) pracNameToBiz[pname].push(bname);
-      });
-      // Stop early if we've found all clinics for all practitioners
-      var allMapped = pracList.every(function(p) {
-        var pid = p.links&&p.links.self?p.links.self.split('/').pop():String(p.id);
-        var pname = pracIdToName[pid]||'';
-        return pracNameToBiz[pname] && pracNameToBiz[pname].length > 0;
-      });
-      if (allMapped) break;
-      if (histData.individual_appointments.length < 100) break;
-      histPage++;
-    }
-    console.log('[BIZ] pracNameToBiz:', JSON.stringify(pracNameToBiz));
 
     // Expand availabilities: one entry per prac+clinic combo
     var expandedAvailabilities = [];
