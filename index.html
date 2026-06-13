@@ -862,6 +862,7 @@ async function loadGaps() {
       if (bizIdToName[a.bizId]) a.bizName = bizIdToName[a.bizId];
     });
 
+    attendeesReady = true;
     populateGapDropdowns();
 
     var byDay = {};
