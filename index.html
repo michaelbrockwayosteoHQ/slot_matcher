@@ -831,30 +831,24 @@ async function loadGaps() {
       }
     }
 
-    // Build prac→clinic map from last 6 months of appointments for reliable association
+    // Build prac→clinic map from the practitioners/businesses endpoint — authoritative
     statusEl.textContent = 'Mapping practitioners to clinics...';
-    var sixMonthsAgo = new Date(today); sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
     var pracNameToBiz = {};
-    var histPage = 1;
-    while (histPage <= 10) {
-      var histParams = 'q[]=' + encodeURIComponent('starts_at:>' + fmt(sixMonthsAgo)) +
-                       '&q[]=' + encodeURIComponent('starts_at:<' + fmt(today)) +
-                       '&per_page=100&page=' + histPage;
-      var histData = await clinikoGet('individual_appointments', histParams);
-      if (!histData || !histData.individual_appointments || !histData.individual_appointments.length) break;
-      histData.individual_appointments.forEach(function(a) {
-        if (a.cancelled_at || a.deleted_at) return;
-        var pid = a.practitioner ? a.practitioner.links.self.split('/').pop() : null;
-        if (!pid) return;
-        var pname = pracIdToName[pid] || '';
-        var bid = a.business ? a.business.links.self.split('/').pop() : '';
-        var bname = bizIdToName[bid] || '';
-        if (!pname || !bname) return;
-        if (!pracNameToBiz[pname]) pracNameToBiz[pname] = [];
-        if (pracNameToBiz[pname].indexOf(bname) === -1) pracNameToBiz[pname].push(bname);
-      });
-      if (histData.individual_appointments.length < 100) break;
-      histPage++;
+    for (var pi3 = 0; pi3 < pracList.length; pi3++) {
+      var p3 = pracList[pi3];
+      var pid3 = p3.links && p3.links.self ? p3.links.self.split('/').pop() : String(p3.id);
+      var pname3 = pracIdToName[pid3] || '';
+      if (!pname3) continue;
+      var bizResp = await clinikoGet('practitioners/' + pid3 + '/businesses');
+      if (bizResp && bizResp.businesses) {
+        bizResp.businesses.forEach(function(b) {
+          var bname = b.name || b.business_name || b.display_name || '';
+          if (!bname) { var bid = b.links&&b.links.self?b.links.self.split('/').pop():''; bname = bizIdToName[bid]||''; }
+          if (!bname) return;
+          if (!pracNameToBiz[pname3]) pracNameToBiz[pname3] = [];
+          if (pracNameToBiz[pname3].indexOf(bname) === -1) pracNameToBiz[pname3].push(bname);
+        });
+      }
     }
     console.log('[BIZ] pracNameToBiz:', JSON.stringify(pracNameToBiz));
 
