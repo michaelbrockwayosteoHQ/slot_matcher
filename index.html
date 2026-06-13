@@ -750,7 +750,19 @@ async function loadGaps() {
     var pickerVal = document.getElementById('weekStartPicker').value;
     var monday;
     if (pickerVal) {
-      monday = new Date(pickerVal + 'T00:00:00');
+      // Normalise — browser inputs return YYYY-MM-DD, but guard against DD/MM/YYYY
+      var parts = pickerVal.split(/[-\/]/);
+      var isoVal = parts[0].length === 4
+        ? pickerVal  // already YYYY-MM-DD
+        : parts[2] + '-' + parts[1] + '-' + parts[0]; // flip DD/MM/YYYY
+      monday = new Date(isoVal + 'T00:00:00');
+      // If still invalid, fall back to this Monday
+      if (isNaN(monday.getTime())) {
+        monday = new Date(today);
+        var dow2 = monday.getDay();
+        monday.setDate(monday.getDate() + (dow2 === 0 ? -6 : 1 - dow2));
+        monday.setHours(0,0,0,0);
+      }
     } else {
       monday = new Date(today);
       var dow = monday.getDay();
@@ -821,27 +833,33 @@ async function loadGaps() {
     }
 
     var clinikoDay = {Monday:1,Tuesday:2,Wednesday:3,Thursday:4,Friday:5,Saturday:6,Sunday:7};
+    // Build booked lookup by BOTH prac ID and prac name as fallback
     var bookedByPracDate = {};
+    var bookedByNameDate = {};
     allAppts.forEach(function(a) {
       if (a.cancelled_at || a.deleted_at) return;
       var pracId = a.practitioner ? a.practitioner.links.self.split('/').pop() : null;
       if (!pracId) return;
+      var pracName = pracIdToName[pracId] || '';
       var start = new Date(a.starts_at); var end = new Date(a.ends_at);
       var dateKey = start.toISOString().slice(0,10);
+      var slot = {startMins:start.getHours()*60+start.getMinutes(), endMins:end.getHours()*60+end.getMinutes()};
       var key = pracId + '|' + dateKey;
       if (!bookedByPracDate[key]) bookedByPracDate[key] = [];
-      bookedByPracDate[key].push({startMins:start.getHours()*60+start.getMinutes(), endMins:end.getHours()*60+end.getMinutes()});
+      bookedByPracDate[key].push(slot);
+      if (pracName) {
+        var nameKey = pracName + '|' + dateKey;
+        if (!bookedByNameDate[nameKey]) bookedByNameDate[nameKey] = [];
+        bookedByNameDate[nameKey].push(slot);
+      }
     });
 
 
     clinikoGaps = [];
     var dayNames = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
-    // Debug: log a sample booked key vs avail key to check ID match
     var sampleBookedKey = Object.keys(bookedByPracDate)[0] || 'none';
     var sampleAvailId = clinikoAvailabilities[0] ? clinikoAvailabilities[0].pracId : 'none';
-    console.log('[GAPS] sample bookedKey:', sampleBookedKey, '| sample avail pracId:', sampleAvailId);
-    console.log('[GAPS] all booked keys:', Object.keys(bookedByPracDate));
     for (var d = 0; d < 7; d++) {
       var dayName = dayNames[d];
       var dateForDay = new Date(monday); dateForDay.setDate(monday.getDate() + d);
@@ -850,7 +868,8 @@ async function loadGaps() {
       clinikoAvailabilities.forEach(function(avail) {
         if (avail.dayOfWeek !== clDay || !avail.availabilities.length) return;
         var key = avail.pracId + '|' + dateStr;
-        var booked = bookedByPracDate[key] || [];
+        var nameKey = avail.pracName + '|' + dateStr;
+        var booked = bookedByPracDate[key] || bookedByNameDate[nameKey] || [];
         avail.availabilities.forEach(function(window) {
           var winStart = parseInt(window.starts_at.split(':')[0])*60 + parseInt(window.starts_at.split(':')[1]);
           var winEnd   = parseInt(window.ends_at.split(':')[0])*60   + parseInt(window.ends_at.split(':')[1]);
