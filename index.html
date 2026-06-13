@@ -835,6 +835,8 @@ async function loadGaps() {
           while (cursor + 40 <= winEnd) {
             var slotEnd = cursor + 40;
             var isBooked = booked.some(function(b) { return b.startMins < slotEnd && b.endMins > cursor; });
+            // Also treat slot as booked if any appointment starts within the window
+            if (!isBooked) isBooked = booked.some(function(b) { return b.startMins >= cursor && b.startMins < slotEnd; });
             if (!isBooked) {
               var h = Math.floor(cursor/60); var m = cursor % 60;
               var ap = h >= 12 ? 'pm' : 'am'; var h12 = h % 12 || 12;
@@ -1008,18 +1010,20 @@ async function findPatientsFromAPI(day, blockKey, prac, selectedBiz) {
       byPatient[pid].dates.push(dateStr);
     });
     var bizData=await clinikoGet('businesses'); var bizIdMap={};
-    if (bizData&&bizData.businesses) bizData.businesses.forEach(function(b) { bizIdMap[b.id]=b.name; });
+    if (bizData&&bizData.businesses) bizData.businesses.forEach(function(b) { bizIdMap[String(b.id)]=b.name; });
     var lastBizNameLookup={};
-    Object.keys(lastBizLookup).forEach(function(pid) { lastBizNameLookup[pid]=bizIdMap[lastBizLookup[pid]]||''; });
+    Object.keys(lastBizLookup).forEach(function(pid) { lastBizNameLookup[pid]=bizIdMap[String(lastBizLookup[pid])]||''; });
     var pracData=await clinikoGet('practitioners'); var pracIdMap={};
-    if (pracData&&pracData.practitioners) pracData.practitioners.forEach(function(p) { pracIdMap[p.id]=p.first_name+' '+p.last_name; });
+    if (pracData&&pracData.practitioners) pracData.practitioners.forEach(function(p) { pracIdMap[String(p.id)]=p.first_name+' '+p.last_name; });
     var lastPracNameLookup={};
-    Object.keys(lastPracLookup).forEach(function(pid) { lastPracNameLookup[pid]=pracIdMap[lastPracLookup[pid]]||''; });
+    Object.keys(lastPracLookup).forEach(function(pid) { lastPracNameLookup[pid]=pracIdMap[String(lastPracLookup[pid])]||''; });
     currentPatients=Object.keys(byPatient).filter(function(pid) {
       var p=byPatient[pid];
       if (hasUpcoming[pid]||p.dates.length<2) return false;
-      if (selectedBiz&&lastBizNameLookup[pid]!==selectedBiz) return false;
-      if (prac&&lastPracNameLookup[pid]!==prac) return false;
+      var resolvedBiz=lastBizNameLookup[pid];
+      if (selectedBiz&&resolvedBiz&&resolvedBiz!==selectedBiz) return false;
+      var resolvedPrac=lastPracNameLookup[pid];
+      if (prac&&resolvedPrac&&resolvedPrac!==prac) return false;
       return true;
     }).map(function(pid) {
       var p=byPatient[pid];
