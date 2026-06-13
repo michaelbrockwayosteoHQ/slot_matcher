@@ -898,8 +898,10 @@ async function loadGaps() {
     clinikoGaps = [];
     var dayNames = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
-    var sampleBookedKey = Object.keys(bookedByPracDate)[0] || 'none';
-    var sampleAvailId = clinikoAvailabilities[0] ? clinikoAvailabilities[0].pracId : 'none';
+    console.log('[GAP] bookedByNameDate keys:', Object.keys(bookedByNameDate).slice(0,5));
+    console.log('[GAP] allAppts count:', allAppts.length);
+    console.log('[GAP] monday:', monday.toISOString().slice(0,10));
+    console.log('[GAP] avail sample:', clinikoAvailabilities[0]);
     for (var d = 0; d < 7; d++) {
       var dayName = dayNames[d];
       var dateForDay = new Date(monday); dateForDay.setDate(monday.getDate() + d);
@@ -1147,11 +1149,12 @@ async function findPatientsFromAPI(day, blockKey, prac, selectedBiz) {
     currentPatients=Object.keys(byPatient).filter(function(pid) {
       var p=byPatient[pid];
       if (hasUpcoming[pid]||p.dates.length<2) return false;
-      // Filter by clinic: patient must have visited this clinic at some point
-      if (selectedBiz&&patientBizSet[pid]&&patientBizSet[pid].indexOf(selectedBiz)===-1) return false;
-      // Filter by prac: patient must have seen this prac at some point
+      // Only filter by clinic if we have biz data for this patient AND it doesn't match
+      var patBizzes=patientBizSet[pid];
+      if (selectedBiz && patBizzes && patBizzes.length>0 && patBizzes.indexOf(selectedBiz)===-1) return false;
+      // Only filter by prac if we resolved a name AND it doesn't match
       var resolvedPrac=lastPracNameLookup[pid];
-      if (prac&&resolvedPrac&&resolvedPrac!==prac) return false;
+      if (prac && resolvedPrac && resolvedPrac!==prac) return false;
       return true;
     }).map(function(pid) {
       var p=byPatient[pid];
