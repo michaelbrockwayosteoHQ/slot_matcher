@@ -776,8 +776,9 @@ async function loadGaps() {
     if (bizData && bizData.businesses) {
       bizData.businesses.forEach(function(b) {
         var name = b.name || b.business_name || b.display_name || b.title || '';
-        if (!name && b.links && b.links.self) name = 'Clinic ' + b.links.self.split('/').pop();
-        bizIdToName[String(b.id)] = name;
+        var bid = b.links && b.links.self ? b.links.self.split('/').pop() : String(b.id);
+        if (!name) name = 'Clinic ' + bid;
+        bizIdToName[bid] = name;
       });
     }
 
@@ -984,15 +985,35 @@ async function findPatientsFromAPI(day, blockKey, prac, selectedBiz) {
     var dayNums={Monday:1,Tuesday:2,Wednesday:3,Thursday:4,Friday:5,Saturday:6,Sunday:0};
     var targetDayNum=dayNums[day];
     statusEl.textContent='Loading appointment history...';
-    var allHistory=[]; var page=1; var maxPages=50;
-    while (page<=maxPages) {
-      var params='q[]='+encodeURIComponent('starts_at:>'+fmt(twoYearsAgo))+'&q[]='+encodeURIComponent('starts_at:<'+fmt(today))+'&per_page=100&page='+page;
+    // Fetch 1: most recent 2500 appointments — used for lastVisit / lastPrac / lastBiz lookups
+    var recentHistory=[]; var page=1;
+    while (page<=25) {
+      var params='q[]='+encodeURIComponent('starts_at:>'+fmt(twoYearsAgo))+'&q[]='+encodeURIComponent('starts_at:<'+fmt(today))+'&sort=starts_at&order=desc&per_page=100&page='+page;
       var data=await clinikoGet('individual_appointments',params);
       if (!data||!data.individual_appointments||data.individual_appointments.length===0) break;
-      allHistory=allHistory.concat(data.individual_appointments);
-      if (allHistory.length>=Math.min(data.total_entries,5000)) break;
+      recentHistory=recentHistory.concat(data.individual_appointments);
+      if (recentHistory.length>=Math.min(data.total_entries,2500)) break;
       page++;
     }
+    statusEl.textContent='Loading historical booking patterns...';
+    // Fetch 2: oldest 2500 appointments — used for slot pattern matching (who books Mon afternoons)
+    var deepHistory=[]; page=1;
+    while (page<=25) {
+      var params2='q[]='+encodeURIComponent('starts_at:>'+fmt(twoYearsAgo))+'&q[]='+encodeURIComponent('starts_at:<'+fmt(today))+'&sort=starts_at&order=asc&per_page=100&page='+page;
+      var data2=await clinikoGet('individual_appointments',params2);
+      if (!data2||!data2.individual_appointments||data2.individual_appointments.length===0) break;
+      deepHistory=deepHistory.concat(data2.individual_appointments);
+      if (deepHistory.length>=Math.min(data2.total_entries,2500)) break;
+      page++;
+    }
+    // Merge, deduplicate by appointment ID
+    var seenIds={};
+    var allHistory=recentHistory.concat(deepHistory).filter(function(a) {
+      var id=a.id||a.links&&a.links.self;
+      if (seenIds[id]) return false;
+      seenIds[id]=true;
+      return true;
+    });
     statusEl.textContent='Analysing '+allHistory.length+' appointments...';
     var lastVisitLookup={}, lastPracLookup={}, lastBizLookup={}, hasUpcoming={};
     var todayStr=today.toISOString().slice(0,10);
@@ -1031,12 +1052,14 @@ async function findPatientsFromAPI(day, blockKey, prac, selectedBiz) {
       byPatient[pid].dates.push(dateStr);
     });
 
-    console.log('[P] history:',allHistory.length,'slotMatches:',slotMatches.length,'byPatient:',Object.keys(byPatient).length,'targetDay:',targetDayNum,'exactMins:',exactMins);
 
     var bizData=await clinikoGet('businesses'); var bizIdMap={};
-    if (bizData&&bizData.businesses) bizData.businesses.forEach(function(b) { bizIdMap[String(b.id)]=b.name; });
+    if (bizData&&bizData.businesses) bizData.businesses.forEach(function(b) {
+      var bid = b.links && b.links.self ? b.links.self.split('/').pop() : String(b.id);
+      bizIdMap[bid] = b.name;
+    });
     var lastBizNameLookup={};
-    Object.keys(lastBizLookup).forEach(function(pid) { lastBizNameLookup[pid]=bizIdMap[String(lastBizLookup[pid])]||''; });
+    Object.keys(lastBizLookup).forEach(function(pid) { lastBizNameLookup[pid]=bizIdMap[lastBizLookup[pid]]||''; });
 
     var pracData=await clinikoGet('practitioners'); var pracIdMap={};
     if (pracData&&pracData.practitioners) pracData.practitioners.forEach(function(p) {
@@ -1046,13 +1069,6 @@ async function findPatientsFromAPI(day, blockKey, prac, selectedBiz) {
     var lastPracNameLookup={};
     Object.keys(lastPracLookup).forEach(function(pid) { lastPracNameLookup[pid]=pracIdMap[String(lastPracLookup[pid])]||''; });
 
-    // Log first 3 candidates with filter breakdown
-    Object.keys(byPatient).slice(0,3).forEach(function(pid) {
-      var p=byPatient[pid];
-      console.log('[P] pid:',pid,'dates:',p.dates.length,'upcoming:',!!hasUpcoming[pid],
-        'lastBizId:',lastBizLookup[pid],'resolvedBiz:',lastBizNameLookup[pid],'selectedBiz:',selectedBiz,
-        'lastPracId:',lastPracLookup[pid],'resolvedPrac:',lastPracNameLookup[pid],'filterPrac:',prac);
-    });
     currentPatients=Object.keys(byPatient).filter(function(pid) {
       var p=byPatient[pid];
       if (hasUpcoming[pid]||p.dates.length<2) return false;
