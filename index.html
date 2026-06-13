@@ -836,6 +836,12 @@ async function loadGaps() {
 
     clinikoGaps = [];
     var dayNames = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+
+    // Debug: log a sample booked key vs avail key to check ID match
+    var sampleBookedKey = Object.keys(bookedByPracDate)[0] || 'none';
+    var sampleAvailId = clinikoAvailabilities[0] ? clinikoAvailabilities[0].pracId : 'none';
+    console.log('[GAPS] sample bookedKey:', sampleBookedKey, '| sample avail pracId:', sampleAvailId);
+    console.log('[GAPS] all booked keys:', Object.keys(bookedByPracDate));
     for (var d = 0; d < 7; d++) {
       var dayName = dayNames[d];
       var dateForDay = new Date(monday); dateForDay.setDate(monday.getDate() + d);
@@ -1069,11 +1075,23 @@ async function findPatientsFromAPI(day, blockKey, prac, selectedBiz) {
     var lastPracNameLookup={};
     Object.keys(lastPracLookup).forEach(function(pid) { lastPracNameLookup[pid]=pracIdMap[String(lastPracLookup[pid])]||''; });
 
+    // Build set of clinics each patient has ever visited
+    var patientBizSet={};
+    allHistory.forEach(function(a) {
+      if (a.cancelled_at||a.deleted_at) return;
+      var pid=a.patient?a.patient.links.self.split('/').pop():null; if (!pid) return;
+      var bid=a.business?a.business.links.self.split('/').pop():'';
+      var bname=bizIdMap[bid]||'';
+      if (!patientBizSet[pid]) patientBizSet[pid]=[];
+      if (bname && patientBizSet[pid].indexOf(bname)===-1) patientBizSet[pid].push(bname);
+    });
+
     currentPatients=Object.keys(byPatient).filter(function(pid) {
       var p=byPatient[pid];
       if (hasUpcoming[pid]||p.dates.length<2) return false;
-      var resolvedBiz=lastBizNameLookup[pid];
-      if (selectedBiz&&resolvedBiz&&resolvedBiz!==selectedBiz) return false;
+      // Filter by clinic: patient must have visited this clinic at some point
+      if (selectedBiz&&patientBizSet[pid]&&patientBizSet[pid].indexOf(selectedBiz)===-1) return false;
+      // Filter by prac: patient must have seen this prac at some point
       var resolvedPrac=lastPracNameLookup[pid];
       if (prac&&resolvedPrac&&resolvedPrac!==prac) return false;
       return true;
