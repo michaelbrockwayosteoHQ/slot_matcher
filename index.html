@@ -793,32 +793,27 @@ async function loadGaps() {
     }
     clinikoAppointments = allAppts;
 
-    var pracBizMap = {};
-    allAppts.forEach(function(a) {
-      if (a.cancelled_at || a.deleted_at) return;
-      var pid = a.practitioner ? String(a.practitioner.links.self.split('/').pop()) : null;
-      var bid = a.business ? String(a.business.links.self.split('/').pop()) : null;
-      if (!pid || !bid) return;
-      if (!pracBizMap[pid]) pracBizMap[pid] = [];
-      if (pracBizMap[pid].indexOf(bid) === -1) pracBizMap[pid].push(bid);
-    });
-
     statusEl.textContent = 'Loading working hours...';
     clinikoAvailabilities = [];
-    for (var pi = 0; pi < pracList.length; pi++) {
-      var prac2 = pracList[pi];
-      // Extract ID from URL path to avoid JS integer precision loss on large IDs
-      var pid2 = prac2.links && prac2.links.self ? prac2.links.self.split('/').pop() : String(prac2.id);
-      var availData = await clinikoGet('practitioners/' + pid2 + '/daily_availabilities');
+    // Load availabilities per business — this gives us correct prac→clinic associations
+    var bizIds = Object.keys(bizIdToName);
+    for (var bi = 0; bi < bizIds.length; bi++) {
+      var bizId = bizIds[bi];
+      var availData = await clinikoGet('businesses/' + bizId + '/daily_availabilities');
       if (availData && availData.daily_availabilities) {
-        var bizIdsForPrac = pracBizMap[pid2] || Object.keys(bizIdToName);
         availData.daily_availabilities.forEach(function(da) {
-          bizIdsForPrac.forEach(function(bid2) {
-            clinikoAvailabilities.push({
-              pracId:pid2, pracName:pracIdToName[pid2]||'',
-              bizId:bid2, bizName:bizIdToName[bid2]||'',
-              dayOfWeek:da.day_of_week, availabilities:da.availabilities||[]
-            });
+          // Extract prac ID from the practitioner link in the availability record
+          var pracId = da.practitioner && da.practitioner.links && da.practitioner.links.self
+            ? da.practitioner.links.self.split('/').pop()
+            : null;
+          if (!pracId) return;
+          clinikoAvailabilities.push({
+            pracId: pracId,
+            pracName: pracIdToName[pracId] || '',
+            bizId: bizId,
+            bizName: bizIdToName[bizId] || '',
+            dayOfWeek: da.day_of_week,
+            availabilities: da.availabilities || []
           });
         });
       }
@@ -989,13 +984,13 @@ async function findPatientsFromAPI(day, blockKey, prac, selectedBiz) {
     var dayNums={Monday:1,Tuesday:2,Wednesday:3,Thursday:4,Friday:5,Saturday:6,Sunday:0};
     var targetDayNum=dayNums[day];
     statusEl.textContent='Loading appointment history...';
-    var allHistory=[]; var page=1; var maxPages=20;
+    var allHistory=[]; var page=1; var maxPages=50;
     while (page<=maxPages) {
       var params='q[]='+encodeURIComponent('starts_at:>'+fmt(twoYearsAgo))+'&q[]='+encodeURIComponent('starts_at:<'+fmt(today))+'&per_page=100&page='+page;
       var data=await clinikoGet('individual_appointments',params);
       if (!data||!data.individual_appointments||data.individual_appointments.length===0) break;
       allHistory=allHistory.concat(data.individual_appointments);
-      if (allHistory.length>=Math.min(data.total_entries,2000)) break;
+      if (allHistory.length>=Math.min(data.total_entries,5000)) break;
       page++;
     }
     statusEl.textContent='Analysing '+allHistory.length+' appointments...';
@@ -1021,7 +1016,12 @@ async function findPatientsFromAPI(day, blockKey, prac, selectedBiz) {
       var start=new Date(a.starts_at);
       if (start.getDay()!==targetDayNum) return false;
       var mins=start.getHours()*60+start.getMinutes();
-      return isExact ? Math.abs(mins-exactMins)<=20 : mins>=block.start*60&&mins<block.end*60;
+      if (isExact) {
+        // Match within 60 mins of the exact slot time
+        return Math.abs(mins-exactMins)<=60;
+      } else {
+        return mins>=block.start*60&&mins<block.end*60;
+      }
     });
     var byPatient={};
     slotMatches.forEach(function(a) {
