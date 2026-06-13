@@ -765,7 +765,11 @@ async function loadGaps() {
     if (!pracData || !pracData.practitioners) { statusEl.style.color='var(--error)'; statusEl.textContent='✗ Could not load practitioners'; return; }
     var pracList = pracData.practitioners;
     var pracIdToName = {};
-    pracList.forEach(function(p) { pracIdToName[String(p.id)] = p.first_name + ' ' + p.last_name; });
+    // Use URL path to extract ID — avoids JS integer precision loss on large Cliniko IDs
+    pracList.forEach(function(p) {
+      var pid = p.links && p.links.self ? p.links.self.split('/').pop() : String(p.id);
+      pracIdToName[pid] = p.first_name + ' ' + p.last_name;
+    });
 
     var bizData = await clinikoGet('businesses');
     var bizIdToName = {};
@@ -802,7 +806,9 @@ async function loadGaps() {
     statusEl.textContent = 'Loading working hours...';
     clinikoAvailabilities = [];
     for (var pi = 0; pi < pracList.length; pi++) {
-      var prac2 = pracList[pi]; var pid2 = String(prac2.id);
+      var prac2 = pracList[pi];
+      // Extract ID from URL path to avoid JS integer precision loss on large IDs
+      var pid2 = prac2.links && prac2.links.self ? prac2.links.self.split('/').pop() : String(prac2.id);
       var availData = await clinikoGet('practitioners/' + pid2 + '/daily_availabilities');
       if (availData && availData.daily_availabilities) {
         var bizIdsForPrac = pracBizMap[pid2] || Object.keys(bizIdToName);
@@ -831,12 +837,6 @@ async function loadGaps() {
       bookedByPracDate[key].push({startMins:start.getHours()*60+start.getMinutes(), endMins:end.getHours()*60+end.getMinutes()});
     });
 
-    console.log('[GAPS] allAppts count:', allAppts.length);
-    console.log('[GAPS] bookedByPracDate keys:', Object.keys(bookedByPracDate));
-    console.log('[GAPS] clinikoAvailabilities count:', clinikoAvailabilities.length);
-    console.log('[GAPS] clinikoAvailabilities sample:', clinikoAvailabilities[0]);
-    console.log('[GAPS] pracIdToName:', pracIdToName);
-    console.log('[GAPS] bizIdToName:', bizIdToName);
 
     clinikoGaps = [];
     var dayNames = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
@@ -1031,26 +1031,17 @@ async function findPatientsFromAPI(day, blockKey, prac, selectedBiz) {
       byPatient[pid].dates.push(dateStr);
     });
 
-    console.log('[PATIENTS] allHistory count:', allHistory.length);
-    console.log('[PATIENTS] slotMatches count:', slotMatches.length);
-    console.log('[PATIENTS] byPatient count:', Object.keys(byPatient).length);
-    console.log('[PATIENTS] selectedBiz:', selectedBiz, 'prac:', prac);
-    console.log('[PATIENTS] targetDayNum:', targetDayNum, 'isExact:', isExact, 'exactMins:', exactMins);
 
     var bizData=await clinikoGet('businesses'); var bizIdMap={};
     if (bizData&&bizData.businesses) bizData.businesses.forEach(function(b) { bizIdMap[String(b.id)]=b.name; });
     var lastBizNameLookup={};
     Object.keys(lastBizLookup).forEach(function(pid) { lastBizNameLookup[pid]=bizIdMap[String(lastBizLookup[pid])]||''; });
 
-    console.log('[PATIENTS] bizIdMap:', bizIdMap);
-    // Sample a few lastBiz lookups
-    var samplePids = Object.keys(byPatient).slice(0,3);
-    samplePids.forEach(function(pid) {
-      console.log('[PATIENTS] pid:', pid, 'lastBizId:', lastBizLookup[pid], 'resolvedBiz:', lastBizNameLookup[pid], 'hasUpcoming:', !!hasUpcoming[pid], 'dates:', byPatient[pid].dates.length);
-    });
-
     var pracData=await clinikoGet('practitioners'); var pracIdMap={};
-    if (pracData&&pracData.practitioners) pracData.practitioners.forEach(function(p) { pracIdMap[String(p.id)]=p.first_name+' '+p.last_name; });
+    if (pracData&&pracData.practitioners) pracData.practitioners.forEach(function(p) {
+      var pid = p.links && p.links.self ? p.links.self.split('/').pop() : String(p.id);
+      pracIdMap[pid] = p.first_name+' '+p.last_name;
+    });
     var lastPracNameLookup={};
     Object.keys(lastPracLookup).forEach(function(pid) { lastPracNameLookup[pid]=pracIdMap[String(lastPracLookup[pid])]||''; });
     currentPatients=Object.keys(byPatient).filter(function(pid) {
