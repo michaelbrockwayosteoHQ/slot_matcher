@@ -399,8 +399,8 @@ a:hover{color:var(--green)}
     <div class="notice">&#x1F512; Patient data is processed locally. Cliniko API key is sent only to your own Cloudflare proxy.</div>
     <div style="margin-top:.75rem;display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">
       <div class="field" style="margin:0;flex:1;min-width:260px;">
-        <label>Cliniko API key <span style="font-weight:400;color:var(--muted)">(base64 encoded)</span></label>
-        <input type="password" id="clinikoKey" placeholder="base64(apikey:password)" style="font-family:'JetBrains Mono',monospace;font-size:13px;">
+        <label>Cliniko API key <span style="font-weight:400;color:var(--muted)">— find in Cliniko → My Info → API Keys</span></label>
+        <input type="password" id="clinikoKey" placeholder="Paste your Cliniko API key" style="font-family:'JetBrains Mono',monospace;font-size:13px;">
       </div>
       <button onclick="testCliniko()" class="btn-sm" style="margin-top:18px;white-space:nowrap;">Test connection</button>
       <div style="margin-top:18px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -714,12 +714,19 @@ function splitLine(line) {
 
 // ── Cliniko API ───────────────────────────────────────────────────────────────
 async function clinikoGet(path, params) {
-  var key = (document.getElementById('clinikoKey') ? document.getElementById('clinikoKey').value : '').trim();
-  if (!key) { alert('Please enter your Cliniko API key first.'); return null; }
+  var rawKey = (document.getElementById('clinikoKey') ? document.getElementById('clinikoKey').value : '').trim();
+  if (!rawKey) { alert('Please enter your Cliniko API key first.'); return null; }
+  // Accept either a raw key (encode it) or an already-encoded base64 string
+  var key = rawKey.indexOf(':') === -1 && rawKey.indexOf(' ') === -1 && rawKey.length < 100
+    ? btoa(rawKey + ':')   // raw key — encode to base64(key:)
+    : rawKey;              // already base64 encoded
   var url = PROXY + '?target=cliniko&path=' + encodeURIComponent(path);
   if (params) url += '&params=' + encodeURIComponent(params);
   var resp = await fetch(url, {method:'GET', headers:{'x-api-key':key}});
-  return await resp.json();
+  // Parse as text first — convert large integers to strings before JS loses precision
+  var text = await resp.text();
+  var safe = text.replace(/:(\s*)(\d{16,})/g, ':"$2"');
+  return JSON.parse(safe);
 }
 
 async function testCliniko() {
@@ -898,10 +905,6 @@ async function loadGaps() {
     clinikoGaps = [];
     var dayNames = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 
-    console.log('[GAP] bookedByNameDate keys:', Object.keys(bookedByNameDate).slice(0,5));
-    console.log('[GAP] allAppts count:', allAppts.length);
-    console.log('[GAP] monday:', monday.toISOString().slice(0,10));
-    console.log('[GAP] avail sample:', clinikoAvailabilities[0]);
     for (var d = 0; d < 7; d++) {
       var dayName = dayNames[d];
       var dateForDay = new Date(monday); dateForDay.setDate(monday.getDate() + d);
