@@ -973,7 +973,7 @@ async function loadGaps() {
     for (var d = 0; d < 7; d++) {
       var dayName = dayNames[d];
       var dateForDay = new Date(monday); dateForDay.setDate(monday.getDate() + d);
-      var dateStr = dateForDay.toISOString().slice(0,10);
+      var dateStr = dateForDay.toLocaleDateString('en-CA', {timeZone:'Australia/Melbourne'});
       var clDay = clinikoDay[dayName];
       clinikoAvailabilities.forEach(function(avail) {
         if (avail.dayOfWeek !== clDay || !avail.availabilities.length) return;
