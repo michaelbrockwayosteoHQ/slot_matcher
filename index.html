@@ -909,8 +909,6 @@ async function loadGaps() {
         console.error('Supabase booked slots error:', bookedAppts);
         bookedAppts = [];
       }
-      console.log('[BOOKED] count:', bookedAppts.length, 'sample:', bookedAppts[0]);
-      console.log('[BOOKED] mondayStr:', mondayStr, 'sundayStr:', sundayStr);
 
       bookedAppts.forEach(function(a) {
         if (!a.practitioner_name || !a.starts_at) return;
@@ -943,8 +941,6 @@ async function loadGaps() {
 
     clinikoGaps = [];
     var dayNames = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
-    console.log('[GAP] bookedByNameDate keys:', Object.keys(bookedByNameDate).slice(0,5));
-    console.log('[GAP] avail sample:', clinikoAvailabilities[0]);
 
     for (var d = 0; d < 7; d++) {
       var dayName = dayNames[d];
