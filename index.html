@@ -905,6 +905,10 @@ async function loadGaps() {
         }
       });
       var bookedAppts = await sbResp.json();
+      if (!Array.isArray(bookedAppts)) {
+        console.error('Supabase booked slots error:', bookedAppts);
+        bookedAppts = [];
+      }
 
       bookedAppts.forEach(function(a) {
         if (!a.practitioner_name || !a.starts_at) return;
@@ -919,8 +923,8 @@ async function loadGaps() {
         });
       });
     } catch(e) {
-      statusEl.textContent = '✗ Could not load booked slots: ' + e.message;
-      return;
+      console.error('Could not load booked slots from Supabase:', e.message);
+      // Continue without booked slot subtraction — show all availability windows
     }
 
 
