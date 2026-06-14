@@ -539,6 +539,9 @@ a:hover{color:var(--green)}
 </main>
 <script>
 var PROXY = 'https://osteo-proxy.michaelbrockway.workers.dev';
+var SUPABASE_URL = 'https://fpyivhtmtpszhhilabfb.supabase.co';
+var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZweWl2aHRtdHBzemhoaWxhYmZiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEzNDcwNjcsImV4cCI6MjA5NjkyMzA2N30.oiV2zB2n3RtQw9ez32CkQntmivqyarsnJ3zAvbl8S28';
+var SUPABASE_ACCOUNT_ID = 'a53f579b-6c5a-4200-ad81-fa31b5beb394';
 
 var attendeesRows = [], notesRows = [], practitioners = [];
 var attendeesReady = false;
@@ -880,26 +883,45 @@ async function loadGaps() {
     clinikoAvailabilities = expandedAvailabilities;
 
     var clinikoDay = {Monday:1,Tuesday:2,Wednesday:3,Thursday:4,Friday:5,Saturday:6,Sunday:7};
-    // Build booked lookup by BOTH prac ID and prac name as fallback
-    var bookedByPracDate = {};
+
+    // Query Supabase for booked slots this week — reliable, name-based, no ID issues
+    statusEl.textContent = 'Loading booked slots from database...';
+    var mondayStr = monday.toISOString().slice(0,10);
+    var sundayStr = sunday.toISOString().slice(0,10);
     var bookedByNameDate = {};
-    allAppts.forEach(function(a) {
-      if (a.cancelled_at || a.deleted_at) return;
-      var pracId = a.practitioner ? a.practitioner.links.self.split('/').pop() : null;
-      if (!pracId) return;
-      var pracName = pracIdToName[pracId] || '';
-      var start = new Date(a.starts_at); var end = new Date(a.ends_at);
-      var dateKey = start.toISOString().slice(0,10);
-      var slot = {startMins:start.getHours()*60+start.getMinutes(), endMins:end.getHours()*60+end.getMinutes()};
-      var key = pracId + '|' + dateKey;
-      if (!bookedByPracDate[key]) bookedByPracDate[key] = [];
-      bookedByPracDate[key].push(slot);
-      if (pracName) {
-        var nameKey = pracName + '|' + dateKey;
+
+    try {
+      var sbUrl = SUPABASE_URL + '/rest/v1/appointments' +
+        '?account_id=eq.' + SUPABASE_ACCOUNT_ID +
+        '&starts_at=gte.' + mondayStr + 'T00:00:00Z' +
+        '&starts_at=lte.' + sundayStr + 'T23:59:59Z' +
+        '&cancelled_at=is.null' +
+        '&select=practitioner_name,starts_at,ends_at';
+
+      var sbResp = await fetch(sbUrl, {
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': 'Bearer ' + SUPABASE_ANON_KEY
+        }
+      });
+      var bookedAppts = await sbResp.json();
+
+      bookedAppts.forEach(function(a) {
+        if (!a.practitioner_name || !a.starts_at) return;
+        var start = new Date(a.starts_at);
+        var end   = new Date(a.ends_at);
+        var dateKey = start.toISOString().slice(0,10);
+        var nameKey = a.practitioner_name + '|' + dateKey;
         if (!bookedByNameDate[nameKey]) bookedByNameDate[nameKey] = [];
-        bookedByNameDate[nameKey].push(slot);
-      }
-    });
+        bookedByNameDate[nameKey].push({
+          startMins: start.getHours()*60 + start.getMinutes(),
+          endMins:   end.getHours()*60   + end.getMinutes()
+        });
+      });
+    } catch(e) {
+      statusEl.textContent = '✗ Could not load booked slots: ' + e.message;
+      return;
+    }
 
 
     clinikoGaps = [];
@@ -913,7 +935,7 @@ async function loadGaps() {
       clinikoAvailabilities.forEach(function(avail) {
         if (avail.dayOfWeek !== clDay || !avail.availabilities.length) return;
         var nameKey = avail.pracName + '|' + dateStr;
-        var booked = bookedByNameDate[nameKey] || bookedByPracDate[avail.pracId + '|' + dateStr] || [];
+        var booked = bookedByNameDate[nameKey] || [];
         avail.availabilities.forEach(function(window) {
           var winStart = parseInt(window.starts_at.split(':')[0])*60 + parseInt(window.starts_at.split(':')[1]);
           var winEnd   = parseInt(window.ends_at.split(':')[0])*60   + parseInt(window.ends_at.split(':')[1]);
