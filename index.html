@@ -824,9 +824,12 @@ async function loadGaps() {
     }
 
     statusEl.textContent = 'Loading this week\'s appointments...';
+    // Extend by 14 hours either side to account for Melbourne timezone (UTC+10/11)
+    var mondayUTC = new Date(monday.getTime() - 14*60*60*1000);
+    var sundayUTC  = new Date(sunday.getTime() + 14*60*60*1000);
     var allAppts = []; var page = 1;
     while (true) {
-      var params = 'q[]=' + encodeURIComponent('starts_at:>' + fmt(monday)) + '&q[]=' + encodeURIComponent('starts_at:<' + fmt(sunday)) + '&per_page=100&page=' + page;
+      var params = 'q[]=' + encodeURIComponent('starts_at:>' + fmt(mondayUTC)) + '&q[]=' + encodeURIComponent('starts_at:<' + fmt(sundayUTC)) + '&per_page=100&page=' + page;
       var data = await clinikoGet('individual_appointments', params);
       if (!data || !data.individual_appointments) break;
       allAppts = allAppts.concat(data.individual_appointments);
@@ -893,8 +896,8 @@ async function loadGaps() {
     try {
       var sbUrl = SUPABASE_URL + '/rest/v1/appointments' +
         '?account_id=eq.' + SUPABASE_ACCOUNT_ID +
-        '&starts_at=gte.' + mondayStr + 'T00:00:00Z' +
-        '&starts_at=lte.' + sundayStr + 'T23:59:59Z' +
+        '&starts_at=gte.' + mondayUTC.toISOString().slice(0,19) + 'Z' +
+        '&starts_at=lte.' + sundayUTC.toISOString().slice(0,19) + 'Z' +
         '&cancelled_at=is.null' +
         '&select=practitioner_name,starts_at,ends_at';
 
