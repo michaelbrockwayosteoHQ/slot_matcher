@@ -935,8 +935,33 @@ async function loadGaps() {
       });
     } catch(e) {
       console.error('Could not load booked slots from Supabase:', e.message);
-      // Continue without booked slot subtraction — show all availability windows
     }
+
+    // Merge live Cliniko appointments — catches bookings since last sync
+    allAppts.forEach(function(a) {
+      if (a.cancelled_at || a.deleted_at) return;
+      var pracId = a.practitioner ? a.practitioner.links.self.split('/').pop() : null;
+      if (!pracId) return;
+      var pracName = pracIdToName[pracId] || '';
+      if (!pracName) return;
+      var startLocal = new Date(a.starts_at).toLocaleString('en-AU', {timeZone:'Australia/Melbourne'});
+      var endLocal   = new Date(a.ends_at).toLocaleString('en-AU', {timeZone:'Australia/Melbourne'});
+      var dateLocal  = new Date(a.starts_at).toLocaleDateString('en-CA', {timeZone:'Australia/Melbourne'});
+      var startParts = startLocal.match(/(\d+):(\d+):\d+\s*(AM|PM)/i);
+      var endParts   = endLocal.match(/(\d+):(\d+):\d+\s*(AM|PM)/i);
+      if (!startParts || !endParts) return;
+      var sh = parseInt(startParts[1]); var sm = parseInt(startParts[2]);
+      var eh = parseInt(endParts[1]);   var em = parseInt(endParts[2]);
+      if (/PM/i.test(startParts[3]) && sh !== 12) sh += 12;
+      if (/AM/i.test(startParts[3]) && sh === 12) sh = 0;
+      if (/PM/i.test(endParts[3]) && eh !== 12) eh += 12;
+      if (/AM/i.test(endParts[3]) && eh === 12) eh = 0;
+      var nameKey = pracName + '|' + dateLocal;
+      if (!bookedByNameDate[nameKey]) bookedByNameDate[nameKey] = [];
+      // Only add if not already present
+      var alreadyHave = bookedByNameDate[nameKey].some(function(b) { return b.startMins === sh*60+sm; });
+      if (!alreadyHave) bookedByNameDate[nameKey].push({startMins:sh*60+sm, endMins:eh*60+em});
+    });
 
 
     clinikoGaps = [];
